@@ -30,14 +30,20 @@ import forge.util.Aggregates;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class ConsoleCommandInterpreter {
+    private static final String CONSOLE_HELP_DOC_PATH = "docs/Adventure/Console-and-cheats.md";
     private static ConsoleCommandInterpreter instance;
     Command root = new Command();
+    private Map<String, String> cachedHelpEntries;
 
     static class Command {
         HashMap<String, Command> children = new HashMap<>();
@@ -125,7 +131,131 @@ public class ConsoleCommandInterpreter {
         return currentGameStage().getPlayerSprite();
     }
 
+    private String normalizeHelpCommandKey(String value) {
+        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        return normalized.replaceAll("\\s+", " ");
+    }
+
+    private Map<String, String> getConsoleHelpEntries() {
+        if (cachedHelpEntries != null) {
+            return cachedHelpEntries;
+        }
+
+        LinkedHashMap<String, String> entries = new LinkedHashMap<>();
+        try {
+            List<String> lines = java.nio.file.Files.readAllLines(java.nio.file.Paths.get(CONSOLE_HELP_DOC_PATH));
+            for (String line : lines) {
+                String trimmed = line.trim();
+                if (!trimmed.startsWith("|")) {
+                    continue;
+                }
+                String[] cells = trimmed.split("\\|");
+                if (cells.length < 4) {
+                    continue;
+                }
+                String commandExample = cells[1].trim();
+                String description = cells[2].trim();
+                if (commandExample.isEmpty() || description.isEmpty()) {
+                    continue;
+                }
+                if ("Command Example".equalsIgnoreCase(commandExample) || "--".equals(commandExample)) {
+                    continue;
+                }
+                entries.put(normalizeHelpCommandKey(commandExample), description);
+            }
+        } catch (Exception e) {
+            System.out.println("Failed to load console help doc from " + CONSOLE_HELP_DOC_PATH + ": " + e.getMessage());
+        }
+
+        cachedHelpEntries = entries;
+        return cachedHelpEntries;
+    }
+
+    private String getAvailableSubcommands(String[] pathParts) {
+        Command current = getCommandNode(pathParts);
+        if (current == null || current.children.isEmpty()) {
+            return null;
+        }
+        ArrayList<String> names = new ArrayList<>(current.children.keySet());
+        Collections.sort(names);
+        return String.join(", ", names);
+    }
+
+    private Command getCommandNode(String[] pathParts) {
+        Command current = root;
+        for (String part : pathParts) {
+            if (!current.children.containsKey(part)) {
+                return null;
+            }
+            current = current.children.get(part);
+        }
+        return current;
+    }
+
+    private String getDetailedSubcommandHelp(String normalizedQuery, Map<String, String> helpEntries) {
+        Command current = getCommandNode(splitOnSpace(normalizedQuery));
+        if (current == null || current.children.isEmpty()) {
+            return null;
+        }
+
+        ArrayList<String> children = new ArrayList<>(current.children.keySet());
+        Collections.sort(children);
+        ArrayList<String> lines = new ArrayList<>();
+
+        for (String child : children) {
+            String prefix = normalizedQuery + " " + child;
+            boolean matched = false;
+            for (Map.Entry<String, String> entry : helpEntries.entrySet()) {
+                String key = entry.getKey();
+                if (key.equals(prefix) || key.startsWith(prefix + " ")) {
+                    lines.add(key + " - " + entry.getValue());
+                    matched = true;
+                }
+            }
+            if (!matched) {
+                lines.add(prefix);
+            }
+        }
+
+        return String.join("\n", lines);
+    }
+
+    private String buildHelpResponse(String[] queryParts) {
+        String normalizedQuery = normalizeHelpCommandKey(String.join(" ", queryParts));
+        if (normalizedQuery.isEmpty()) {
+            ArrayList<String> topLevel = new ArrayList<>(root.children.keySet());
+            Collections.sort(topLevel);
+            return "Usage: help <command>\nTop-level commands: " + String.join(", ", topLevel);
+        }
+
+        Map<String, String> helpEntries = getConsoleHelpEntries();
+        ArrayList<String> matches = new ArrayList<>();
+        for (Map.Entry<String, String> entry : helpEntries.entrySet()) {
+            String key = entry.getKey();
+            if (key.equals(normalizedQuery) || key.startsWith(normalizedQuery + " ")) {
+                matches.add(entry.getKey() + " - " + entry.getValue());
+            }
+        }
+        Collections.sort(matches);
+        if (!matches.isEmpty()) {
+            return String.join("\n", matches);
+        }
+
+        String detailedSubcommandHelp = getDetailedSubcommandHelp(normalizedQuery, helpEntries);
+        if (detailedSubcommandHelp != null) {
+            return detailedSubcommandHelp;
+        }
+
+        String subcommands = getAvailableSubcommands(splitOnSpace(normalizedQuery));
+        if (subcommands != null) {
+            return "No usage entry found for \"" + normalizedQuery + "\".\nSubcommands: " + subcommands;
+        }
+
+        return "No help found for \"" + normalizedQuery + "\".";
+    }
+
     private ConsoleCommandInterpreter() {
+        registerCommand(new String[]{"help"}, this::buildHelpResponse);
         registerCommand(new String[]{"teleport", "to"}, s -> {
             if (s.length < 2)
                 return "Command needs 2 parameter";
