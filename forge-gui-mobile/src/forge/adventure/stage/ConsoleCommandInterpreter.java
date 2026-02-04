@@ -192,6 +192,11 @@ public class ConsoleCommandInterpreter {
         return current;
     }
 
+    private boolean isRegisteredCommand(String normalizedQuery) {
+        Command node = getCommandNode(splitOnSpace(normalizedQuery));
+        return node != null && node.function != null;
+    }
+
     private String getDetailedSubcommandHelp(String normalizedQuery, Map<String, String> helpEntries) {
         Command current = getCommandNode(splitOnSpace(normalizedQuery));
         if (current == null || current.children.isEmpty()) {
@@ -249,6 +254,10 @@ public class ConsoleCommandInterpreter {
         String subcommands = getAvailableSubcommands(splitOnSpace(normalizedQuery));
         if (subcommands != null) {
             return "No usage entry found for \"" + normalizedQuery + "\".\nSubcommands: " + subcommands;
+        }
+
+        if (isRegisteredCommand(normalizedQuery)) {
+            return "Usage: " + normalizedQuery;
         }
 
         return "No help found for \"" + normalizedQuery + "\".";
@@ -427,9 +436,11 @@ public class ConsoleCommandInterpreter {
             if (s.length >= 2) {
                 try {
                     amount = Integer.parseInt(s[1]);
-                } catch (NumberFormatException ignored) {
+                } catch (NumberFormatException e) {
+                    return "Can not convert " + s[1] + " to integer";
                 }
             }
+            if (amount <= 0) return "Amount must be greater than 0.";
 
             for (int i = 0; i < amount; i++) {
                 Current.player().addBooster(AdventureEventController.instance().generateBooster(edition.getCode()));
@@ -563,7 +574,7 @@ public class ConsoleCommandInterpreter {
             return "Debug map ON";
         });
         registerCommand(new String[]{"debug", "off"}, s -> {
-            GameHUD.getInstance().setDebug(true);
+            GameHUD.getInstance().setDebug(false);
             currentGameStage().debugCollision(false);
             return "Debug  OFF";
         });
@@ -589,7 +600,7 @@ public class ConsoleCommandInterpreter {
                 return "Can not convert " + s[0] + " to float";
             }
             currentGameStage().hideFor(value);
-            return "removed all enemies";
+            return "Enemies ignore the player for " + value + " seconds.";
         });
 
         registerCommand(new String[]{"fly"}, s -> {
@@ -601,7 +612,7 @@ public class ConsoleCommandInterpreter {
                 return "Can not convert " + s[0] + " to float";
             }
             currentGameStage().flyFor(value);
-            return "removed all enemies";
+            return "Fly enabled for " + value + " seconds.";
         });
         registerCommand(new String[]{"sprint"}, s -> {
             if (s.length < 1) return "Command needs 1 parameter: Amount";
@@ -612,11 +623,11 @@ public class ConsoleCommandInterpreter {
                 return "Can not convert " + s[0] + " to float";
             }
             currentGameStage().sprintFor(value);
-            return "removed all enemies";
+            return "Sprint enabled for " + value + " seconds.";
         });
         registerCommand(new String[]{"remove", "enemy", "nearest"}, s -> {
             WorldStage.getInstance().removeNearestEnemy();
-            return "removed all enemies";
+            return "Removed nearest enemy.";
         });
         registerCommand(new String[]{"remove", "enemy"}, s -> {
             if (s.length < 1) return "Command needs 1 parameter: Enemy map ID.";
