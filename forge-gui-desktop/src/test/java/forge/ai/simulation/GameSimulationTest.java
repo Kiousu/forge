@@ -1,19 +1,24 @@
 package forge.ai.simulation;
 
 import com.google.common.collect.Lists;
+import forge.ai.ComputerUtil;
 import forge.ai.ComputerUtilAbility;
 import forge.card.CardStateName;
 import forge.card.MagicColor;
 import forge.game.Game;
+import forge.game.GameActionUtil;
+import forge.game.ability.AbilityKey;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
 import forge.game.card.CardCollectionView;
 import forge.game.card.CounterEnumType;
+import forge.game.cost.CostPayment;
 import forge.game.keyword.Keyword;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
+import forge.game.zone.Zone;
 import forge.game.zone.ZoneType;
 import org.testng.AssertJUnit;
 import org.testng.annotations.Test;
@@ -2637,6 +2642,106 @@ public class GameSimulationTest extends SimulationTest {
 
         AssertJUnit.assertEquals(1, game.getPlayers().get(0).getCardsIn(ZoneType.Hand).size());
         AssertJUnit.assertTrue(spell.isInZone(ZoneType.Graveyard));
+    }
+
+    private Card setupOutpostSiegeKhansAndExileTopCard(Game game, Player p, String topCardName) {
+        addCards("Mountain", 4, p);
+        addCardToZone(topCardName, p, ZoneType.Library);
+        Card outpostSiege = addCardToZone("Outpost Siege", p, ZoneType.Battlefield);
+        outpostSiege.setChosenMode("Khans");
+
+        game.getAction().checkStateEffects(true);
+        game.getPhaseHandler().devModeSet(PhaseType.UNTAP, p);
+        game.getPhaseHandler().devAdvanceToPhase(PhaseType.UPKEEP);
+        playUntilStackClear(game);
+
+        Card exiledCard = null;
+        for (Card c : p.getCardsIn(ZoneType.Exile)) {
+            if (topCardName.equals(c.getName())) {
+                exiledCard = c;
+                break;
+            }
+        }
+        AssertJUnit.assertNotNull(exiledCard);
+        AssertJUnit.assertFalse(exiledCard.mayPlay(p).isEmpty());
+        return exiledCard;
+    }
+
+    private Card startCastingThenRollback(Game game, Player p, Card card) {
+        SpellAbility castSa = card.getFirstSpellAbility();
+        castSa.setActivatingPlayer(p);
+        Zone fromZone = game.getZoneOf(card);
+        int zonePosition = fromZone.getCards().indexOf(card);
+        Card originalCard = card;
+
+        castSa.setHostCard(game.getAction().moveToStack(card, castSa));
+        castSa = GameActionUtil.addExtraKeywordCost(castSa);
+        CostPayment payment = new CostPayment(castSa.getPayCosts(), castSa);
+        GameActionUtil.rollbackAbility(castSa, fromZone, zonePosition, payment, originalCard);
+
+        for (Card c : p.getCardsIn(ZoneType.Exile)) {
+            if (c.getName().equals(originalCard.getName())) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    @Test
+    public void testOutpostSiegeKhansCanCastExiledCardWithoutRollback() {
+        Game game = initAndCreateGame();
+        Player p = game.getPlayers().get(1);
+
+        Card exiledCard = setupOutpostSiegeKhansAndExileTopCard(game, p, "Hill Giant");
+        SpellAbility castSa = exiledCard.getFirstSpellAbility();
+        castSa.setActivatingPlayer(p);
+        boolean played = ComputerUtil.playStack(castSa, p, game);
+        AssertJUnit.assertTrue(played);
+        playUntilStackClear(game);
+
+        AssertJUnit.assertEquals(1, countCardsWithName(game, "Hill Giant", ZoneType.Battlefield));
+        AssertJUnit.assertEquals(0, countCardsWithName(game, "Hill Giant", ZoneType.Exile));
+    }
+
+    @Test
+    public void testOutpostSiegeKhansRollbackKeepsPermissionSameTurn() {
+        Game game = initAndCreateGame();
+        Player p = game.getPlayers().get(1);
+
+        Card exiledCard = setupOutpostSiegeKhansAndExileTopCard(game, p, "Hill Giant");
+        Card cardAfterRollback = startCastingThenRollback(game, p, exiledCard);
+
+        AssertJUnit.assertNotNull(cardAfterRollback);
+        AssertJUnit.assertTrue(cardAfterRollback.isInZone(ZoneType.Exile));
+        AssertJUnit.assertFalse(cardAfterRollback.mayPlay(p).isEmpty());
+
+        SpellAbility recastSa = cardAfterRollback.getFirstSpellAbility();
+        recastSa.setActivatingPlayer(p);
+        boolean played = ComputerUtil.playStack(recastSa, p, game);
+        AssertJUnit.assertTrue(played);
+        playUntilStackClear(game);
+
+        AssertJUnit.assertEquals(1, countCardsWithName(game, "Hill Giant", ZoneType.Battlefield));
+        AssertJUnit.assertEquals(0, countCardsWithName(game, "Hill Giant", ZoneType.Exile));
+    }
+
+    @Test
+    public void testOutpostSiegeKhansPermissionExpiresEndOfTurnWithoutRollback() {
+        Game game = initAndCreateGame();
+        Player p = game.getPlayers().get(1);
+
+        Card exiledCard = setupOutpostSiegeKhansAndExileTopCard(game, p, "Hill Giant");
+        AssertJUnit.assertFalse(exiledCard.mayPlay(p).isEmpty());
+        for (Card c : p.getCardsIn(ZoneType.Battlefield)) {
+            if (c.isLand()) {
+                c.setTapped(true);
+            }
+        }
+
+        playUntilNextTurn(game);
+
+        AssertJUnit.assertTrue(exiledCard.isInZone(ZoneType.Exile));
+        AssertJUnit.assertTrue(exiledCard.mayPlay(p).isEmpty());
     }
 
     /**
