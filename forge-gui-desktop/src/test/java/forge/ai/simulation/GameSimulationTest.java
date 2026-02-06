@@ -2667,26 +2667,6 @@ public class GameSimulationTest extends SimulationTest {
         return exiledCard;
     }
 
-    private Card startCastingThenRollback(Game game, Player p, Card card) {
-        SpellAbility castSa = card.getFirstSpellAbility();
-        castSa.setActivatingPlayer(p);
-        Zone fromZone = game.getZoneOf(card);
-        int zonePosition = fromZone.getCards().indexOf(card);
-        Card originalCard = card;
-
-        castSa.setHostCard(game.getAction().moveToStack(card, castSa));
-        castSa = GameActionUtil.addExtraKeywordCost(castSa);
-        CostPayment payment = new CostPayment(castSa.getPayCosts(), castSa);
-        GameActionUtil.rollbackAbility(castSa, fromZone, zonePosition, payment, originalCard);
-
-        for (Card c : p.getCardsIn(ZoneType.Exile)) {
-            if (c.getName().equals(originalCard.getName())) {
-                return c;
-            }
-        }
-        return null;
-    }
-
     @Test
     public void testOutpostSiegeKhansCanCastExiledCardWithoutRollback() {
         Game game = initAndCreateGame();
@@ -2709,7 +2689,23 @@ public class GameSimulationTest extends SimulationTest {
         Player p = game.getPlayers().get(1);
 
         Card exiledCard = setupOutpostSiegeKhansAndExileTopCard(game, p, "Hill Giant");
-        Card cardAfterRollback = startCastingThenRollback(game, p, exiledCard);
+        SpellAbility castSa = exiledCard.getFirstSpellAbility();
+        castSa.setActivatingPlayer(p);
+        Zone fromZone = game.getZoneOf(exiledCard);
+        int zonePosition = fromZone.getCards().indexOf(exiledCard);
+
+        castSa.setHostCard(game.getAction().moveToStack(exiledCard, castSa));
+        castSa = GameActionUtil.addExtraKeywordCost(castSa);
+        CostPayment payment = new CostPayment(castSa.getPayCosts(), castSa);
+        GameActionUtil.rollbackAbility(castSa, fromZone, zonePosition, payment, exiledCard);
+
+        Card cardAfterRollback = null;
+        for (Card c : p.getCardsIn(ZoneType.Exile)) {
+            if (c.getName().equals(exiledCard.getName())) {
+                cardAfterRollback = c;
+                break;
+            }
+        }
 
         AssertJUnit.assertNotNull(cardAfterRollback);
         AssertJUnit.assertTrue(cardAfterRollback.isInZone(ZoneType.Exile));
