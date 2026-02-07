@@ -6,21 +6,18 @@ import forge.ai.ComputerUtilAbility;
 import forge.card.CardStateName;
 import forge.card.MagicColor;
 import forge.game.Game;
-import forge.game.GameActionUtil;
-import forge.game.ability.AbilityKey;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
 import forge.game.card.CardCollectionView;
 import forge.game.card.CounterEnumType;
-import forge.game.cost.CostPayment;
 import forge.game.keyword.Keyword;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
-import forge.game.zone.Zone;
 import forge.game.zone.ZoneType;
 import org.testng.AssertJUnit;
+import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 import java.util.HashMap;
@@ -2645,7 +2642,7 @@ public class GameSimulationTest extends SimulationTest {
     }
 
     private Card setupOutpostSiegeKhansAndExileTopCard(Game game, Player p, String topCardName) {
-        addCards("Mountain", 4, p);
+        addCards("Mountain", 5, p);
         addCardToZone(topCardName, p, ZoneType.Library);
         Card outpostSiege = addCardToZone("Outpost Siege", p, ZoneType.Battlefield);
         outpostSiege.setChosenMode("Khans");
@@ -2654,14 +2651,11 @@ public class GameSimulationTest extends SimulationTest {
         game.getPhaseHandler().devModeSet(PhaseType.UNTAP, p);
         game.getPhaseHandler().devAdvanceToPhase(PhaseType.UPKEEP);
         playUntilStackClear(game);
+        game.getPhaseHandler().devAdvanceToPhase(PhaseType.MAIN1);
 
-        Card exiledCard = null;
-        for (Card c : p.getCardsIn(ZoneType.Exile)) {
-            if (topCardName.equals(c.getName())) {
-                exiledCard = c;
-                break;
-            }
-        }
+        AssertJUnit.assertEquals(1, p.getCardsIn(ZoneType.Exile).size());
+        Card exiledCard = p.getCardsIn(ZoneType.Exile).get(0);
+        AssertJUnit.assertEquals(topCardName, exiledCard.getName());
         AssertJUnit.assertNotNull(exiledCard);
         AssertJUnit.assertFalse(exiledCard.mayPlay(p).isEmpty());
         return exiledCard;
@@ -2684,41 +2678,34 @@ public class GameSimulationTest extends SimulationTest {
     }
 
     @Test
-    public void testOutpostSiegeKhansRollbackKeepsPermissionSameTurn() {
+    public void testOutpostSiegeKhansCardRemainsCastableAfterOtherSpellSameTurn() {
         Game game = initAndCreateGame();
         Player p = game.getPlayers().get(1);
+        Player opp = game.getPlayers().get(0);
 
         Card exiledCard = setupOutpostSiegeKhansAndExileTopCard(game, p, "Hill Giant");
-        SpellAbility castSa = exiledCard.getFirstSpellAbility();
-        castSa.setActivatingPlayer(p);
-        Zone fromZone = game.getZoneOf(exiledCard);
-        int zonePosition = fromZone.getCards().indexOf(exiledCard);
-
-        castSa.setHostCard(game.getAction().moveToStack(exiledCard, castSa));
-        castSa = GameActionUtil.addExtraKeywordCost(castSa);
-        CostPayment payment = new CostPayment(castSa.getPayCosts(), castSa);
-        GameActionUtil.rollbackAbility(castSa, fromZone, zonePosition, payment, exiledCard);
-
-        Card cardAfterRollback = null;
-        for (Card c : p.getCardsIn(ZoneType.Exile)) {
-            if (c.getName().equals(exiledCard.getName())) {
-                cardAfterRollback = c;
-                break;
-            }
-        }
-
-        AssertJUnit.assertNotNull(cardAfterRollback);
-        AssertJUnit.assertTrue(cardAfterRollback.isInZone(ZoneType.Exile));
-        AssertJUnit.assertFalse(cardAfterRollback.mayPlay(p).isEmpty());
-
-        SpellAbility recastSa = cardAfterRollback.getFirstSpellAbility();
-        recastSa.setActivatingPlayer(p);
-        boolean played = ComputerUtil.playStack(recastSa, p, game);
-        AssertJUnit.assertTrue(played);
+        Card shock = addCardToZone("Shock", p, ZoneType.Hand);
+        SpellAbility shockSa = shock.getFirstSpellAbility();
+        shockSa.setActivatingPlayer(p);
+        shockSa.getTargets().add(opp);
+        AssertJUnit.assertTrue("Expected Shock to be castable from hand.", ComputerUtil.playStack(shockSa, p, game));
         playUntilStackClear(game);
 
-        AssertJUnit.assertEquals(1, countCardsWithName(game, "Hill Giant", ZoneType.Battlefield));
-        AssertJUnit.assertEquals(0, countCardsWithName(game, "Hill Giant", ZoneType.Exile));
+        AssertJUnit.assertTrue("Exiled card should still be castable this turn after another spell.",
+                !exiledCard.mayPlay(p).isEmpty());
+        SpellAbility castExiled = exiledCard.getFirstSpellAbility();
+        castExiled.setActivatingPlayer(p);
+        AssertJUnit.assertTrue("Expected exiled card to still be castable this turn.",
+                ComputerUtil.playStack(castExiled, p, game));
+        playUntilStackClear(game);
+        AssertJUnit.assertEquals(
+                1,
+                countCardsWithName(game, "Hill Giant", ZoneType.Battlefield)
+        );
+        AssertJUnit.assertEquals(
+                0,
+                countCardsWithName(game, "Hill Giant", ZoneType.Exile)
+        );
     }
 
     @Test
@@ -2813,6 +2800,455 @@ public class GameSimulationTest extends SimulationTest {
         }
 
         return true;  // All words appear exactly once
+    }
+
+    private boolean isEffectCardFromSource(Card c, String sourceName) {
+        Card source = c.getEffectSource();
+        return c.isImmutable() && source != null && sourceName.equals(source.getName());
+    }
+
+    private Card findSingleEffectCardFromSource(Player p, ZoneType zoneType, String sourceName) {
+        Card found = null;
+        for (Card c : p.getCardsIn(zoneType)) {
+            if (!isEffectCardFromSource(c, sourceName)) {
+                continue;
+            }
+            if (found != null) {
+                AssertJUnit.fail("Expected a single effect card from " + sourceName + " in " + zoneType);
+            }
+            found = c;
+        }
+        return found;
+    }
+
+    private Card getSingleRememberedCard(Card effect, String sourceName) {
+        Card found = null;
+        for (Object remembered : effect.getRemembered()) {
+            if (!(remembered instanceof Card)) {
+                continue;
+            }
+            Card rememberedCard = (Card) remembered;
+            if (found != null) {
+                AssertJUnit.fail("Expected a single remembered card on effect from " + sourceName);
+            }
+            found = rememberedCard;
+        }
+        AssertJUnit.assertNotNull("No remembered card found on effect from " + sourceName, found);
+        return found;
+    }
+
+    private Card findSingleCardByName(Player p, ZoneType zoneType, String cardName) {
+        Card found = null;
+        for (Card c : p.getCardsIn(zoneType)) {
+            if (!cardName.equals(c.getName())) {
+                continue;
+            }
+            if (found != null) {
+                AssertJUnit.fail("Expected a single " + cardName + " in " + zoneType);
+            }
+            found = c;
+        }
+        AssertJUnit.assertNotNull("Expected to find " + cardName + " in " + zoneType, found);
+        return found;
+    }
+
+    private int countEffectCardsFromSource(Player p, ZoneType zoneType, String sourceName) {
+        int count = 0;
+        for (Card c : p.getCardsIn(zoneType)) {
+            if (isEffectCardFromSource(c, sourceName)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private SpellAbility findAbilityWithExileOnMoved(Card c, String originSpec) {
+        for (SpellAbility sa : c.getSpellAbilities()) {
+            if (sa.hasParam("ExileOnMoved") && originSpec.equals(sa.getParam("ExileOnMoved"))) {
+                return sa;
+            }
+        }
+        return null;
+    }
+
+    private void castSpellWithCardTarget(Game game, Player p, Card spellCard, Card target, String message) {
+        SpellAbility sa = spellCard.getFirstSpellAbility();
+        sa.setActivatingPlayer(p);
+        sa.getTargets().add(target);
+        AssertJUnit.assertTrue(message, ComputerUtil.playStack(sa, p, game));
+        playUntilStackClear(game);
+    }
+
+    private static final String CASE_OUTPOST_MATCH = "outpost_match";
+    private static final String CASE_OUTPOST_NONMATCH = "outpost_nonmatch";
+    private static final String CASE_PASSWALL_MATCH = "passwall_match";
+    private static final String CASE_PASSWALL_NONMATCH = "passwall_nonmatch";
+    private static final String CASE_MISSION_MATCH = "mission_match";
+    private static final String CASE_MISSION_NONMATCH = "mission_nonmatch";
+    private static final String CASE_HAVENGUL_MATCH = "havengul_match";
+    private static final String CASE_HAVENGUL_NONMATCH = "havengul_nonmatch";
+    private static final String CASE_TEFERI_EXILESTACK_MATCH = "teferi_exilestack_match";
+    private static final String CASE_TEFERI_EXILESTACK_NONMATCH = "teferi_exilestack_nonmatch";
+    private static final String CASE_RECOMMISSION_GRAVEYARD_STACK = "recommission_graveyard_stack";
+
+    private enum ExileOnMovedExpectation {
+        DECREASE,
+        UNCHANGED,
+        ZERO
+    }
+
+    private static final class ExileOnMovedObservation {
+        final String sourceName;
+        final int commandBefore;
+        final int commandAfter;
+        final String details;
+
+        private ExileOnMovedObservation(String sourceName, int commandBefore, int commandAfter, String details) {
+            this.sourceName = sourceName;
+            this.commandBefore = commandBefore;
+            this.commandAfter = commandAfter;
+            this.details = details;
+        }
+    }
+
+    @DataProvider(name = "exileOnMovedRuntimeMatrix")
+    public Object[][] exileOnMovedRuntimeMatrix() {
+        return new Object[][] {
+                { CASE_OUTPOST_MATCH, ExileOnMovedExpectation.DECREASE },
+                { CASE_OUTPOST_NONMATCH, ExileOnMovedExpectation.UNCHANGED },
+                { CASE_PASSWALL_MATCH, ExileOnMovedExpectation.DECREASE },
+                { CASE_PASSWALL_NONMATCH, ExileOnMovedExpectation.UNCHANGED },
+                { CASE_MISSION_MATCH, ExileOnMovedExpectation.DECREASE },
+                { CASE_MISSION_NONMATCH, ExileOnMovedExpectation.UNCHANGED },
+                { CASE_HAVENGUL_MATCH, ExileOnMovedExpectation.DECREASE },
+                { CASE_HAVENGUL_NONMATCH, ExileOnMovedExpectation.UNCHANGED },
+                { CASE_TEFERI_EXILESTACK_MATCH, ExileOnMovedExpectation.ZERO },
+                { CASE_TEFERI_EXILESTACK_NONMATCH, ExileOnMovedExpectation.UNCHANGED },
+                { CASE_RECOMMISSION_GRAVEYARD_STACK, ExileOnMovedExpectation.ZERO }
+        };
+    }
+
+    private Card findCardByIdInZone(Player p, ZoneType zoneType, int cardId) {
+        for (Card c : p.getCardsIn(zoneType)) {
+            if (c.getId() == cardId) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    private ExileOnMovedObservation runOutpostScenario(boolean matchingOrigin) {
+        Game game = initAndCreateGame();
+        Player p = game.getPlayers().get(1);
+        Player opp = game.getPlayers().get(0);
+
+        Card exiledCard = setupOutpostSiegeKhansAndExileTopCard(game, p, "Hill Giant");
+        Card effect = findSingleEffectCardFromSource(p, ZoneType.Command, "Outpost Siege");
+        AssertJUnit.assertNotNull("Missing Outpost Siege effect card in command zone", effect);
+        AssertJUnit.assertEquals("Hill Giant", getSingleRememberedCard(effect, "Outpost Siege").getName());
+
+        int commandBefore = countEffectCardsFromSource(p, ZoneType.Command, "Outpost Siege");
+
+        if (matchingOrigin) {
+            SpellAbility castSa = exiledCard.getFirstSpellAbility();
+            castSa.setActivatingPlayer(p);
+            AssertJUnit.assertTrue("Expected exiled card to be castable in Outpost matching scenario.",
+                    ComputerUtil.playStack(castSa, p, game));
+        } else {
+            Card shock = addCardToZone("Shock", p, ZoneType.Hand);
+            SpellAbility shockSa = shock.getFirstSpellAbility();
+            shockSa.setActivatingPlayer(p);
+            shockSa.getTargets().add(opp);
+            AssertJUnit.assertTrue("Expected unrelated spell to be castable in Outpost nonmatching scenario.",
+                    ComputerUtil.playStack(shockSa, p, game));
+        }
+        playUntilStackClear(game);
+
+        int commandAfter = countEffectCardsFromSource(p, ZoneType.Command, "Outpost Siege");
+        return new ExileOnMovedObservation(
+                "Outpost Siege",
+                commandBefore,
+                commandAfter,
+                "matchingOrigin=" + matchingOrigin + ", hillGiantExile=" + countCardsWithName(game, "Hill Giant", ZoneType.Exile)
+        );
+    }
+
+    private ExileOnMovedObservation runPasswallScenario(boolean matchingOrigin) {
+        Game game = initAndCreateGame();
+        Player p = game.getPlayers().get(1);
+        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, p);
+
+        addCards("Island", 8, p);
+        Card passwallAdept = addCard("Passwall Adept", p);
+        Card target = addCard("Hill Giant", p);
+        Card unrelated = addCard("Grizzly Bears", p);
+        Card unsummon = addCardToZone("Unsummon", p, ZoneType.Hand);
+
+        SpellAbility sa = findAbilityWithExileOnMoved(passwallAdept, "Battlefield");
+        AssertJUnit.assertNotNull("Passwall Adept activated ability not found", sa);
+        sa.setActivatingPlayer(p);
+        sa.getTargets().add(target);
+        AssertJUnit.assertTrue("Expected Passwall Adept ability to activate.",
+                ComputerUtil.playStack(sa, p, game));
+        playUntilStackClear(game);
+
+        Card effect = findSingleEffectCardFromSource(p, ZoneType.Command, "Passwall Adept");
+        AssertJUnit.assertNotNull("Missing Passwall Adept effect card in command zone", effect);
+        getSingleRememberedCard(effect, "Passwall Adept");
+
+        int commandBefore = countEffectCardsFromSource(p, ZoneType.Command, "Passwall Adept");
+        castSpellWithCardTarget(
+                game,
+                p,
+                unsummon,
+                matchingOrigin ? target : unrelated,
+                "Expected Unsummon to bounce the chosen creature in Passwall scenario."
+        );
+
+        int commandAfter = countEffectCardsFromSource(p, ZoneType.Command, "Passwall Adept");
+        return new ExileOnMovedObservation(
+                "Passwall Adept",
+                commandBefore,
+                commandAfter,
+                "matchingOrigin=" + matchingOrigin
+        );
+    }
+
+    private ExileOnMovedObservation runMissionBriefingScenario(boolean matchingOrigin) {
+        Game game = initAndCreateGame();
+        Player p = game.getPlayers().get(1);
+        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, p);
+
+        addCards("Island", 5, p);
+        Card missionBriefing = addCardToZone("Mission Briefing", p, ZoneType.Hand);
+        addCardToZone("Ponder", p, ZoneType.Graveyard);
+        Card callToMind = addCardToZone("Call to Mind", p, ZoneType.Hand);
+
+        SpellAbility missionSa = missionBriefing.getFirstSpellAbility();
+        missionSa.setActivatingPlayer(p);
+        AssertJUnit.assertTrue(ComputerUtil.playStack(missionSa, p, game));
+        playUntilStackClear(game);
+
+        Card effect = findSingleEffectCardFromSource(p, ZoneType.Command, "Mission Briefing");
+        AssertJUnit.assertNotNull("Missing Mission Briefing effect card in command zone", effect);
+        Card remembered = getSingleRememberedCard(effect, "Mission Briefing");
+        AssertJUnit.assertEquals("Ponder", remembered.getName());
+
+        int commandBefore = countEffectCardsFromSource(p, ZoneType.Command, "Mission Briefing");
+        if (matchingOrigin) {
+            Card ponderInYard = findSingleCardByName(p, ZoneType.Graveyard, "Ponder");
+            SpellAbility castRemembered = ponderInYard.getFirstSpellAbility();
+            castRemembered.setActivatingPlayer(p);
+            AssertJUnit.assertTrue(ComputerUtil.playStack(castRemembered, p, game));
+        } else {
+            Card ponderInYard = findSingleCardByName(p, ZoneType.Graveyard, "Ponder");
+            castSpellWithCardTarget(
+                    game,
+                    p,
+                    callToMind,
+                    ponderInYard,
+                    "Expected Call to Mind to move remembered card from graveyard without using the Mission permission."
+            );
+        }
+        playUntilStackClear(game);
+
+        int commandAfter = countEffectCardsFromSource(p, ZoneType.Command, "Mission Briefing");
+        return new ExileOnMovedObservation(
+                "Mission Briefing",
+                commandBefore,
+                commandAfter,
+                "matchingOrigin=" + matchingOrigin + ", ponderInGraveyard=" + countCardsWithName(game, "Ponder", ZoneType.Graveyard)
+        );
+    }
+
+    private ExileOnMovedObservation runHavengulScenario(boolean matchingOrigin) {
+        Game game = initAndCreateGame();
+        Player p = game.getPlayers().get(1);
+        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, p);
+
+        addCard("Havengul Lich", p);
+        addCards("Island", 2, p);
+        addCards("Swamp", 2, p);
+        addCards("Forest", 2, p);
+        Card target = addCardToZone("Runeclaw Bear", p, ZoneType.Graveyard);
+        Card unrelated = addCard("Grizzly Bears", p);
+        Card unsummon = addCardToZone("Unsummon", p, ZoneType.Hand);
+
+        Card lich = findCardWithName(game, "Havengul Lich");
+        SpellAbility sa = findAbilityWithExileOnMoved(lich, "Graveyard");
+        AssertJUnit.assertNotNull("Havengul Lich activated ability not found", sa);
+        sa.setActivatingPlayer(p);
+        sa.getTargets().add(target);
+        AssertJUnit.assertTrue("Expected Havengul Lich ability to activate.",
+                ComputerUtil.playStack(sa, p, game));
+        playUntilStackClear(game);
+
+        Card effect = findSingleEffectCardFromSource(p, ZoneType.Command, "Havengul Lich");
+        AssertJUnit.assertNotNull("Missing Havengul Lich effect card in command zone", effect);
+        Card remembered = getSingleRememberedCard(effect, "Havengul Lich");
+
+        int commandBefore = countEffectCardsFromSource(p, ZoneType.Command, "Havengul Lich");
+        if (matchingOrigin) {
+            Card bearInYard = findSingleCardByName(p, ZoneType.Graveyard, "Runeclaw Bear");
+            SpellAbility castRemembered = bearInYard.getFirstSpellAbility();
+            castRemembered.setActivatingPlayer(p);
+            AssertJUnit.assertTrue("Expected remembered creature to be castable from graveyard.",
+                    ComputerUtil.playStack(castRemembered, p, game));
+            playUntilStackClear(game);
+        } else {
+            castSpellWithCardTarget(
+                    game,
+                    p,
+                    unsummon,
+                    unrelated,
+                    "Expected Unsummon to move unrelated creature in Havengul nonmatching scenario."
+            );
+        }
+
+        int commandAfter = countEffectCardsFromSource(p, ZoneType.Command, "Havengul Lich");
+        return new ExileOnMovedObservation(
+                "Havengul Lich",
+                commandBefore,
+                commandAfter,
+                "matchingOrigin=" + matchingOrigin + ", rememberedName=" + remembered.getName()
+        );
+    }
+
+    private ExileOnMovedObservation runTeferiExileStackScenario(boolean matchingOrigin) {
+        Game game = initAndCreateGame();
+        Player p = game.getPlayers().get(1);
+        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, p);
+
+        addCards("Island", 4, p);
+        Card teferi = addCardToZone("Teferi's Time Twist", p, ZoneType.Hand);
+        Card hillGiant = addCard("Hill Giant", p);
+        Card unrelated = addCard("Grizzly Bears", p);
+        Card unsummon = addCardToZone("Unsummon", p, ZoneType.Hand);
+
+        SpellAbility sa = teferi.getFirstSpellAbility();
+        sa.setActivatingPlayer(p);
+        sa.getTargets().add(hillGiant);
+        AssertJUnit.assertTrue(ComputerUtil.playStack(sa, p, game));
+        playUntilStackClear(game);
+
+        AssertJUnit.assertEquals(1, countCardsWithName(game, "Hill Giant", ZoneType.Exile));
+        int commandBefore = countEffectCardsFromSource(p, ZoneType.Command, "Teferi's Time Twist");
+
+        if (matchingOrigin) {
+            game.getPhaseHandler().devAdvanceToPhase(PhaseType.END_OF_TURN);
+            playUntilStackClear(game);
+            Card returned = findCardByIdInZone(p, ZoneType.Battlefield, hillGiant.getId());
+            AssertJUnit.assertNotNull("Teferi target should return to battlefield", returned);
+            AssertJUnit.assertEquals("Teferi target should enter with +1/+1 counter", 1,
+                    returned.getCounters(CounterEnumType.P1P1));
+        } else {
+            castSpellWithCardTarget(
+                    game,
+                    p,
+                    unsummon,
+                    unrelated,
+                    "Expected Unsummon to move unrelated creature before end step."
+            );
+            AssertJUnit.assertEquals("Unrelated movement should not affect Teferi remembered card before EOT",
+                    1, countCardsWithName(game, "Hill Giant", ZoneType.Exile));
+        }
+
+        int commandAfter = countEffectCardsFromSource(p, ZoneType.Command, "Teferi's Time Twist");
+        return new ExileOnMovedObservation(
+                "Teferi's Time Twist",
+                commandBefore,
+                commandAfter,
+                "matchingOrigin=" + matchingOrigin + ", hillGiantExile=" + countCardsWithName(game, "Hill Giant", ZoneType.Exile)
+        );
+    }
+
+    private ExileOnMovedObservation runRecommissionGraveyardStackScenario() {
+        Game game = initAndCreateGame();
+        Player p = game.getPlayers().get(1);
+        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, p);
+
+        addCards("Plains", 2, p);
+        Card recommission = addCardToZone("Recommission", p, ZoneType.Hand);
+        Card target = addCardToZone("Runeclaw Bear", p, ZoneType.Graveyard);
+
+        SpellAbility sa = recommission.getFirstSpellAbility();
+        sa.setActivatingPlayer(p);
+        SpellAbility dbReturn = sa.getSubAbility();
+        AssertJUnit.assertNotNull("Recommission should have DBReturn sub-ability", dbReturn);
+        dbReturn.setActivatingPlayer(p);
+        dbReturn.getTargets().add(target);
+        AssertJUnit.assertTrue("Expected Recommission to be castable with a legal graveyard target.",
+                ComputerUtil.playStack(sa, p, game));
+        playUntilStackClear(game);
+
+        Card returned = findCardByIdInZone(p, ZoneType.Battlefield, target.getId());
+        AssertJUnit.assertNotNull("Recommission target should return to battlefield", returned);
+        AssertJUnit.assertEquals("Recommission target should enter with +1/+1 counter", 1,
+                returned.getCounters(CounterEnumType.P1P1));
+
+        int commandAfter = countEffectCardsFromSource(p, ZoneType.Command, "Recommission");
+        return new ExileOnMovedObservation(
+                "Recommission",
+                0,
+                commandAfter,
+                "returnedTargetId=" + returned.getId() + ", p1Counters=" + returned.getCounters(CounterEnumType.P1P1)
+        );
+    }
+
+    private ExileOnMovedObservation runExileOnMovedScenario(String scenarioId) {
+        switch (scenarioId) {
+            case CASE_OUTPOST_MATCH:
+                return runOutpostScenario(true);
+            case CASE_OUTPOST_NONMATCH:
+                return runOutpostScenario(false);
+            case CASE_PASSWALL_MATCH:
+                return runPasswallScenario(true);
+            case CASE_PASSWALL_NONMATCH:
+                return runPasswallScenario(false);
+            case CASE_MISSION_MATCH:
+                return runMissionBriefingScenario(true);
+            case CASE_MISSION_NONMATCH:
+                return runMissionBriefingScenario(false);
+            case CASE_HAVENGUL_MATCH:
+                return runHavengulScenario(true);
+            case CASE_HAVENGUL_NONMATCH:
+                return runHavengulScenario(false);
+            case CASE_TEFERI_EXILESTACK_MATCH:
+                return runTeferiExileStackScenario(true);
+            case CASE_TEFERI_EXILESTACK_NONMATCH:
+                return runTeferiExileStackScenario(false);
+            case CASE_RECOMMISSION_GRAVEYARD_STACK:
+                return runRecommissionGraveyardStackScenario();
+            default:
+                AssertJUnit.fail("Unknown ExileOnMoved scenario: " + scenarioId);
+                return null;
+        }
+    }
+
+    @Test(dataProvider = "exileOnMovedRuntimeMatrix")
+    public void testExileOnMovedRuntimeBehaviorMatrix(String scenarioId, ExileOnMovedExpectation expectation) {
+        ExileOnMovedObservation observation = runExileOnMovedScenario(scenarioId);
+        String debug = "scenario=" + scenarioId
+                + ", source=" + observation.sourceName
+                + ", commandBefore=" + observation.commandBefore
+                + ", commandAfter=" + observation.commandAfter
+                + ", details=" + observation.details;
+        switch (expectation) {
+            case DECREASE:
+                AssertJUnit.assertTrue("Expected command effect count to decrease. " + debug,
+                        observation.commandAfter < observation.commandBefore);
+                break;
+            case UNCHANGED:
+                AssertJUnit.assertEquals("Expected command effect count to stay unchanged. " + debug,
+                        observation.commandBefore, observation.commandAfter);
+                break;
+            case ZERO:
+                AssertJUnit.assertEquals("Expected command effect count to be zero. " + debug,
+                        0, observation.commandAfter);
+                break;
+            default:
+                AssertJUnit.fail("Unhandled expectation: " + expectation + ". " + debug);
+        }
     }
 
 }
