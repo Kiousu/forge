@@ -7,12 +7,15 @@ import forge.Forge;
 import forge.StaticData;
 import forge.adventure.character.PlayerSprite;
 import forge.adventure.data.*;
+import forge.adventure.player.AdventurePlayer;
 import forge.adventure.pointofintrest.PointOfInterest;
 import forge.adventure.scene.InnScene;
 import forge.adventure.scene.InventoryScene;
+import forge.adventure.scene.TileMapScene;
 import forge.adventure.util.AdventureEventController;
 import forge.adventure.util.Current;
 import forge.adventure.util.Paths;
+import forge.adventure.world.World;
 import forge.adventure.world.WorldSave;
 import forge.card.CardEdition;
 import forge.card.ColorSet;
@@ -29,8 +32,8 @@ import forge.util.Aggregates;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -263,8 +266,222 @@ public class ConsoleCommandInterpreter {
         return "No help found for \"" + normalizedQuery + "\".";
     }
 
+    private PointOfInterest findNearestPointOfInterest(Vector2 playerPosition, boolean activeOnly) {
+        PointOfInterest nearest = null;
+        float nearestDistanceSquared = Float.MAX_VALUE;
+        for (PointOfInterest poi : Current.world().getAllPointOfInterest()) {
+            if (poi == null) {
+                continue;
+            }
+            if (activeOnly && !poi.getActive()) {
+                continue;
+            }
+            float distanceSquared = poi.getPosition().dst2(playerPosition);
+            if (distanceSquared < nearestDistanceSquared) {
+                nearestDistanceSquared = distanceSquared;
+                nearest = poi;
+            }
+        }
+        return nearest;
+    }
+
+    private String buildWhereAmIResponse(String[] s) {
+        Vector2 position = currentSprite().pos();
+        if (MapStage.getInstance().isInMap()) {
+            PointOfInterest rootPoint = TileMapScene.instance().rootPoint;
+            String poiName = rootPoint == null ? "Unknown" : rootPoint.getDisplayName();
+            String poiType = rootPoint == null ? "unknown" : rootPoint.getData().type;
+            String poiId = rootPoint == null ? "n/a" : rootPoint.getID();
+
+            String mapSize = "";
+            if (MapStage.getInstance().tiledMap != null) {
+                Object width = MapStage.getInstance().tiledMap.getProperties().get("width");
+                Object height = MapStage.getInstance().tiledMap.getProperties().get("height");
+                if (width != null && height != null) {
+                    mapSize = String.format(", mapSize=%sx%s tiles", width, height);
+                }
+            }
+
+            return String.format(Locale.ROOT,
+                    "Location: map (%s, type=%s)%nPOI ID: %s%nPosition: x=%.1f y=%.1f%s",
+                    poiName, poiType, poiId, position.x, position.y, mapSize);
+        }
+
+        World world = Current.world();
+        int tileSize = world.getTileSize();
+        int tileX = (int) (position.x / tileSize);
+        int tileY = (int) (position.y / tileSize);
+        int biomeIndex = World.highestBiome(world.getBiome(tileX, tileY));
+        List<BiomeData> biomes = world.getData().GetBiomes();
+        String biomeName = biomeIndex >= 0 && biomeIndex < biomes.size() ? biomes.get(biomeIndex).name : "Road/Unknown";
+
+        PointOfInterest nearest = findNearestPointOfInterest(position, true);
+        if (nearest == null) {
+            nearest = findNearestPointOfInterest(position, false);
+        }
+        String nearestPoiLine = "Nearest POI: none";
+        if (nearest != null) {
+            nearestPoiLine = String.format(Locale.ROOT, "Nearest POI: %s (%s), distance=%.0f",
+                    nearest.getDisplayName(), nearest.getData().type, nearest.getPosition().dst(position));
+        }
+
+        return String.format(Locale.ROOT,
+                "Location: overworld%nPosition: x=%.1f y=%.1f (tile %d,%d)%nBiome: %s%n%s%nWorld size: %dx%d tiles",
+                position.x, position.y, tileX, tileY, biomeName, nearestPoiLine, world.getWidthInTiles(), world.getHeightInTiles());
+    }
+
+    private String buildPlayerStatsResponse(String[] s) {
+        AdventurePlayer player = Current.player();
+        Deck selectedDeck = player.getSelectedDeck();
+        String deckName = selectedDeck == null ? "N/A" : selectedDeck.getName();
+        String difficultyName = player.getDifficulty().name == null || player.getDifficulty().name.isEmpty() ? "unknown" : player.getDifficulty().name;
+        Vector2 position = currentSprite().pos();
+
+        return String.format(Locale.ROOT,
+                "Player: %s%nLife: %d/%d%nGold: %d%nShards: %d%nColor ID: %s%nDeck: #%d %s%nDifficulty: %s%nModes: fantasy=%s, customDeck=%s, hardOrInsane=%s%nProgress: quests=%d, events=%d%nPosition: x=%.1f y=%.1f (%s)",
+                player.getName(),
+                player.getLife(),
+                player.getMaxLife(),
+                player.getGold(),
+                player.getShards(),
+                player.getColorIdentity(),
+                player.getSelectedDeckIndex() + 1,
+                deckName,
+                difficultyName,
+                player.isFantasyMode(),
+                player.isUsingCustomDeck(),
+                player.isHardorInsaneDifficulty(),
+                player.getQuests().size(),
+                player.getEvents().size(),
+                position.x,
+                position.y,
+                MapStage.getInstance().isInMap() ? "map" : "overworld");
+    }
+
+    private String buildSpawnResponse(String[] s) {
+        int offset = 0;
+        if (s.length > 0 && "enemy".equalsIgnoreCase(s[0])) {
+            offset = 1;
+        }
+        if (s.length <= offset) {
+            return "Command needs at least 1 parameter: enemy name.";
+        }
+        if (MapStage.getInstance().isInMap()) {
+            return "Spawning is only supported on the overworld. Leave the current map first.";
+        }
+
+        String enemyName = s[offset];
+        int amount = 1;
+        if (s.length > offset + 1) {
+            try {
+                amount = Integer.parseInt(s[offset + 1]);
+            } catch (Exception e) {
+                return "Can not convert " + s[offset + 1] + " to number";
+            }
+        }
+        if (amount <= 0) {
+            return "Amount must be greater than 0.";
+        }
+
+        int spawned = 0;
+        for (int i = 0; i < amount; i++) {
+            if (WorldStage.getInstance().spawn(enemyName)) {
+                spawned++;
+            }
+        }
+        if (spawned <= 0) {
+            return "Can not find enemy " + enemyName;
+        }
+        if (spawned < amount) {
+            return String.format("Spawned %d/%d %s.", spawned, amount, enemyName);
+        }
+        return amount == 1 ? "Spawned " + enemyName + "." : String.format("Spawned %d %s.", amount, enemyName);
+    }
+
+    private CardBlock resolveEventBlockByNameOrEdition(String blockNameOrEdition) {
+        CardBlock eventCardBlock = FModel.getBlocks().find(b -> b.getName().equalsIgnoreCase(blockNameOrEdition));
+        if (eventCardBlock != null) {
+            return eventCardBlock;
+        }
+
+        CardEdition edition = FModel.getMagicDb().getEditions().find(e -> e.getCode().equalsIgnoreCase(blockNameOrEdition) || e.getName().equalsIgnoreCase(blockNameOrEdition));
+        if (edition == null) {
+            return null;
+        }
+        return Aggregates.random(AdventureEventData.getValidDraftBlocks(List.of(edition)));
+    }
+
+    private String buildEventRerollResponse(String[] s) {
+        if (s.length > 2) {
+            return "Usage: event reroll [format] [block or edition]";
+        }
+        if (MapStage.getInstance().findLocalInn() == null) {
+            return "Must be used within a town with an inn.";
+        }
+
+        AdventureEventController.EventFormat eventFormat = null;
+        String blockOrEdition = null;
+
+        if (s.length >= 1) {
+            AdventureEventController.EventFormat firstAsFormat = AdventureEventController.EventFormat.smartValueOf(s[0]);
+            if (firstAsFormat != AdventureEventController.EventFormat.Draft && firstAsFormat != AdventureEventController.EventFormat.Jumpstart) {
+                firstAsFormat = null;
+            }
+            if (firstAsFormat != null) {
+                eventFormat = firstAsFormat;
+                if (s.length == 2) {
+                    blockOrEdition = s[1];
+                }
+            } else {
+                blockOrEdition = s[0];
+                if (s.length == 2) {
+                    eventFormat = AdventureEventController.EventFormat.smartValueOf(s[1]);
+                    if (eventFormat != AdventureEventController.EventFormat.Draft && eventFormat != AdventureEventController.EventFormat.Jumpstart) {
+                        return "Unknown or unsupported event format: " + s[1] + ". Supported formats: Draft, Jumpstart.";
+                    }
+                }
+            }
+        }
+
+        CardBlock eventCardBlock;
+        if (blockOrEdition != null) {
+            eventCardBlock = resolveEventBlockByNameOrEdition(blockOrEdition);
+            if (eventCardBlock == null) {
+                return "Unable to find edition or block: " + blockOrEdition;
+            }
+            if (eventFormat == null) {
+                eventFormat = eventCardBlock.getName().toLowerCase(Locale.ROOT).contains("jumpstart")
+                        ? AdventureEventController.EventFormat.Jumpstart
+                        : AdventureEventController.EventFormat.Draft;
+            }
+        } else {
+            if (eventFormat == null) {
+                // Reuse controller logic for default format selection without local nextEventDate gating.
+                AdventureEventData generated = AdventureEventController.instance().createEvent(String.valueOf(System.nanoTime()));
+                if (generated == null || generated.getCardBlock() == null) {
+                    return "Unable to create a random local event.";
+                }
+                eventFormat = generated.format;
+                eventCardBlock = generated.getCardBlock();
+            } else {
+                eventCardBlock = new AdventureEventData(System.nanoTime(), eventFormat).getCardBlock();
+                if (eventCardBlock == null) {
+                    return "Unable to find a valid event block for format: " + eventFormat.name();
+                }
+            }
+        }
+
+        InnScene.replaceLocalEvent(eventFormat, eventCardBlock);
+        return "Rerolled local event to " + eventFormat.name() + " - " + eventCardBlock.getName();
+    }
+
     private ConsoleCommandInterpreter() {
         registerCommand(new String[]{"help"}, this::buildHelpResponse);
+        registerCommand(new String[]{"whereami"}, this::buildWhereAmIResponse);
+        registerCommand(new String[]{"playerstats"}, this::buildPlayerStatsResponse);
+        registerCommand(new String[]{"player", "stats"}, this::buildPlayerStatsResponse);
+        registerCommand(new String[]{"spawn"}, this::buildSpawnResponse);
+        registerCommand(new String[]{"event", "reroll"}, this::buildEventRerollResponse);
         registerCommand(new String[]{"teleport", "to"}, s -> {
             if (s.length < 2)
                 return "Command needs 2 parameter";
@@ -293,13 +510,7 @@ public class ConsoleCommandInterpreter {
             }, Forge.takeScreenshot())));
             return "Teleported to " + s[0] + "(" + poi.getPosition() + ")";
         });
-        registerCommand(new String[]{"spawn", "enemy"}, s -> {
-            if (s.length < 1) return "Command needs 1 parameter: enemy name.";
-
-            if (WorldStage.getInstance().spawn(s[0]))
-                return "Spawn " + s[0];
-            return "Can not find enemy " + s[0];
-        });
+        registerCommand(new String[]{"spawn", "enemy"}, this::buildSpawnResponse);
         registerCommand(new String[]{"give", "gold"}, s -> {
             if (s.length < 1) return "Command needs 1 parameter: Amount.";
             int amount;
@@ -450,10 +661,34 @@ public class ConsoleCommandInterpreter {
         });
         registerCommand(new String[]{"clearnosell"}, s -> {
             CardPool cards = Current.player().getCards();
-            for (PaperCard c : cards.getFilteredPool(c -> c.getMarkedFlags().noSellValue).toFlatList()) {
-                cards.remove(c);
+            int convertedCopies = 0;
+            int keptFlaggedCopies = 0;
+            for (Map.Entry<PaperCard, Integer> entry : cards.getFilteredPool(c -> c.getMarkedFlags().noSellValue)) {
+                PaperCard noSellCard = entry.getKey();
+                int noSellCopies = entry.getValue();
+                int copiesUsedInDecks = Current.player().getCopiesUsedInDecks(noSellCard);
+                int copiesToConvert = Math.max(0, noSellCopies - copiesUsedInDecks);
+                if (copiesToConvert <= 0) {
+                    keptFlaggedCopies += noSellCopies;
+                    continue;
+                }
+                if (!cards.remove(noSellCard, copiesToConvert)) {
+                    continue;
+                }
+                cards.add(noSellCard.copyWithoutFlags(), copiesToConvert);
+                convertedCopies += copiesToConvert;
+                keptFlaggedCopies += Math.min(noSellCopies, copiesUsedInDecks);
             }
-            return "Removed all no sell flagged cards.";
+            if (convertedCopies == 0) {
+                return keptFlaggedCopies > 0
+                        ? "No no-sell copies were cleared. All no-sell cards are currently used in decks."
+                        : "No no-sell flagged cards found.";
+            }
+            if (keptFlaggedCopies > 0) {
+                return String.format("Cleared no-sell flag from %d copy/copies. Kept %d copy/copies flagged because they are used in decks.",
+                        convertedCopies, keptFlaggedCopies);
+            }
+            return String.format("Cleared no-sell flag from %d copy/copies.", convertedCopies);
         });
         registerCommand(new String[]{"give", "item"}, s -> {
             if (s.length < 1) return "Command needs 1 parameter: Item name.";
@@ -660,19 +895,18 @@ public class ConsoleCommandInterpreter {
             String blockName = s[0];
             if(MapStage.getInstance().findLocalInn() == null)
                 return "Must be used within a town with an inn.";
-            CardBlock eventCardBlock = FModel.getBlocks().find(b -> b.getName().equalsIgnoreCase(blockName));
-            if(eventCardBlock == null) {
-                CardEdition edition = FModel.getMagicDb().getEditions().find(e -> e.getCode().equalsIgnoreCase(blockName) || e.getName().equalsIgnoreCase(blockName));
-                if(edition == null)
-                    return "Unable to find edition or block: " + blockName;
-                eventCardBlock = Aggregates.random(AdventureEventData.getValidDraftBlocks(List.of(edition)));
-                if(eventCardBlock == null)
-                    return "Unable to find a valid event block that exclusively contains edition " + edition.getName();
+            CardBlock eventCardBlock = resolveEventBlockByNameOrEdition(blockName);
+            if(eventCardBlock == null)
+                return "Unable to find edition or block: " + blockName;
+            AdventureEventController.EventFormat eventFormat = eventCardBlock.getName().contains("Jumpstart")
+                    ? AdventureEventController.EventFormat.Jumpstart
+                    : AdventureEventController.EventFormat.Draft;
+            if (s.length > 1) {
+                eventFormat = AdventureEventController.EventFormat.smartValueOf(s[1]);
+                if (eventFormat != AdventureEventController.EventFormat.Draft && eventFormat != AdventureEventController.EventFormat.Jumpstart) {
+                    return "Unknown or unsupported event format: " + s[1] + ". Supported formats: Draft, Jumpstart.";
+                }
             }
-            AdventureEventController.EventFormat eventFormat = s.length > 1 ? AdventureEventController.EventFormat.smartValueOf(s[1])
-                    : eventCardBlock.getName().contains("Jumpstart") ? AdventureEventController.EventFormat.Jumpstart : AdventureEventController.EventFormat.Draft;
-            if(eventFormat == null)
-                return "Unknown event format: " + s[1];
             InnScene.replaceLocalEvent(eventFormat, eventCardBlock);
             return "Replaced local event with " + eventFormat.name() + " - " + eventCardBlock.getName();
         });

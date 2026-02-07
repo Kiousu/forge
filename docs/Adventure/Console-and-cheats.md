@@ -12,6 +12,8 @@ To scroll the console window, click and drag the text box.
 | -- | -- |
 | resetMapQuests | Resets the map quests, resulting in all side-quest progress being lost and all side-quest types being re-picked |
 | help give | Show help for a command group or specific command |
+| whereami | Print current location details (overworld/map, coordinates, biome, nearest POI) |
+| playerstats | Print player resources, deck slot, difficulty, flags, and progress counts |
 | give gold 1000 | Give 1000 gold |
 | give shards 1000 | Give 1000 shards |
 | give print lea 232 | Add an alpha (LEA set code) black lotus (232 collector number) |
@@ -40,7 +42,8 @@ To scroll the console window, click and drag the text box.
 | hide 100 | Enemies do not chase you for 100 seconds |
 | fly 100 | You can walk over obstacles for 100 seconds |
 | crack | Cracks a random item you are wearing |
-| spawn enemy Sliver | Spawns a Sliver on your screen |
+| spawn Sliver | Spawn an enemy near the player (overworld only); supports optional amount like `spawn Sliver 3` |
+| spawn enemy Sliver | Alias for `spawn` |
 | listPOI | Prints all locations in terminal output stream as ID-type pairings |
 | leave | Gets you out of the current town/dungeon/cave |
 | dumpEnemyColorIdentity | Prints all enemies, their colour affinity and deck name to terminal output |
@@ -48,7 +51,9 @@ To scroll the console window, click and drag the text box.
 | heal percent 0.25 | Recover health by a percentage of max health |
 | heal full | Recover your full health |
 | reveal cave | Reveal unvisited Point of Interest names for one or more types (for example: cave, dungeon, town, capital, castle) |
-| set event dmu Draft | Replace the local inn event with a specific block/edition and format (town with inn required) |
+| set event dmu Draft | Replace the local inn event with a specific block/edition and format (`Draft` or `Jumpstart`, town with inn required) |
+| event reroll | Reroll the current town's local inn event (town with inn required) |
+| event reroll Draft dmu | Reroll the local inn event with a chosen format and block/edition |
 | dumpEnemyDeckColors | Prints all decks available to enemies and their affinities |
 | reset map | Reset the current map (not overworld) after you exit it |
 | exit | Close the console |
