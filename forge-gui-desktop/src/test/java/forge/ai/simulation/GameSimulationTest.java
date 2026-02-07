@@ -2656,7 +2656,6 @@ public class GameSimulationTest extends SimulationTest {
         AssertJUnit.assertEquals(1, p.getCardsIn(ZoneType.Exile).size());
         Card exiledCard = p.getCardsIn(ZoneType.Exile).get(0);
         AssertJUnit.assertEquals(topCardName, exiledCard.getName());
-        AssertJUnit.assertNotNull(exiledCard);
         AssertJUnit.assertFalse(exiledCard.mayPlay(p).isEmpty());
         return exiledCard;
     }
@@ -2691,8 +2690,8 @@ public class GameSimulationTest extends SimulationTest {
         AssertJUnit.assertTrue("Expected Shock to be castable from hand.", ComputerUtil.playStack(shockSa, p, game));
         playUntilStackClear(game);
 
-        AssertJUnit.assertTrue("Exiled card should still be castable this turn after another spell.",
-                !exiledCard.mayPlay(p).isEmpty());
+        AssertJUnit.assertFalse("Exiled card should still be castable this turn after another spell.",
+                exiledCard.mayPlay(p).isEmpty());
         SpellAbility castExiled = exiledCard.getFirstSpellAbility();
         castExiled.setActivatingPlayer(p);
         AssertJUnit.assertTrue("Expected exiled card to still be castable this turn.",
