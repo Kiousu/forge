@@ -1,23 +1,24 @@
 package forge.player;
 
-import java.util.Set;
-
-import org.apache.commons.lang3.StringUtils;
-
 import forge.LobbyPlayer;
 import forge.ai.AIOption;
 import forge.ai.AiProfileUtil;
 import forge.ai.LobbyPlayerAi;
 import forge.gui.GuiBase;
 import forge.gui.util.SOptionPane;
+import forge.localinstance.properties.ForgeNetPreferences;
 import forge.localinstance.properties.ForgePreferences.FPref;
 import forge.model.FModel;
 import forge.util.GuiDisplayUtil;
+import forge.util.Localizer;
 import forge.util.MyRandom;
+import org.apache.commons.lang3.StringUtils;
+
+import java.util.Set;
 
 public final class GamePlayerUtil {
     private GamePlayerUtil() { }
-
+    private static Localizer localizer = Localizer.getInstance();
     private static final LobbyPlayer guiPlayer = new LobbyPlayerHuman("Human");
     public static LobbyPlayer getGuiPlayer() {
         return guiPlayer;
@@ -70,7 +71,7 @@ public final class GamePlayerUtil {
 
         // TODO: implement specific AI profiles for quest mode.
         String profile = "";
-        if (profileOverride.isEmpty()) {
+        if (profileOverride == null || profileOverride.isEmpty()) {
             String lastProfileChosen = FModel.getPreferences().getPref(FPref.UI_CURRENT_AI_PROFILE);
             if (!AiProfileUtil.getProfilesDisplayList().contains(lastProfileChosen)) {
                 System.out.println("[AI Preferences] Unknown profile " + lastProfileChosen + " was requested, resetting to default.");
@@ -87,8 +88,9 @@ public final class GamePlayerUtil {
             profile = profileOverride;
         }
 
-        assert (!profile.isEmpty());
-        
+        assert (!profile.isEmpty()); // TODO test instead of assert
+
+        System.out.println("[AI Preferences] using profile " + profile);
         player.setAiProfile(profile);
         player.setAvatarIndex(avatarIndex);
         player.setSleeveIndex(sleeveIndex);
@@ -118,6 +120,13 @@ public final class GamePlayerUtil {
         }
     }
 
+    public static void setServerPort() {
+        final int oldPort = FModel.getNetPreferences().getPrefInt(ForgeNetPreferences.FNetPref.NET_PORT);
+        int newPort = getServerPortPrompt(oldPort);
+        FModel.getNetPreferences().setPref(ForgeNetPreferences.FNetPref.NET_PORT, String.valueOf(newPort));
+        FModel.getNetPreferences().save();
+    }
+
     private static void showThankYouPrompt(final String playerName) {
         SOptionPane.showMessageDialog("Thank you, " + playerName + ". "
                 + "You will not be prompted again but you can change\n"
@@ -141,6 +150,29 @@ public final class GamePlayerUtil {
                 playerName);
     }
 
+    private static Integer getServerPortPrompt(final Integer serverPort) {
+        String input = SOptionPane.showInputDialog(
+                localizer.getMessage("sOPServerPromptMessage"),
+                localizer.getMessage("sOPServerPromptTitle"),
+                null,
+                serverPort.toString(),
+                null,
+                true
+        );
+        Integer port;
+        try {
+             port = Integer.parseInt(input);
+        } catch (NumberFormatException nfe) {
+            SOptionPane.showErrorDialog(localizer.getMessage("sOPServerPromptError", input));
+            return serverPort;
+        }
+        if(port < 0 || port > 65535) {
+            SOptionPane.showErrorDialog(localizer.getMessage("sOPServerPromptError", input));
+            return serverPort;
+        }
+        return  port;
+    }
+
     private static String getVerifiedPlayerName(String newName, final String oldName) {
         if (newName == null || !StringUtils.isAlphanumericSpace(newName)) {
             newName = (StringUtils.isBlank(oldName) ? "Human" : oldName);
@@ -151,4 +183,6 @@ public final class GamePlayerUtil {
         }
         return newName;
     }
+
+
 }

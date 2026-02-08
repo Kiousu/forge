@@ -18,9 +18,10 @@
 package forge.game.spellability;
 
 import java.util.Map;
+import java.util.List;
+import com.google.common.collect.Lists;
 
 import forge.game.IHasSVars;
-import forge.game.ability.AbilityFactory;
 import forge.game.ability.ApiType;
 import forge.game.ability.SpellAbilityEffect;
 import forge.game.card.Card;
@@ -85,13 +86,7 @@ public final class AbilitySub extends SpellAbility implements java.io.Serializab
 
         effect = api.getSpellEffect();
 
-        if (api.equals(ApiType.Mana) || api.equals(ApiType.ManaReflected)) {
-            this.setManaPart(new AbilityManaPart(this, mapParams));
-        }
-
-        if (api.equals(ApiType.ChangeZone) || api.equals(ApiType.ChangeZoneAll)) {
-            AbilityFactory.adjustChangeZoneTarget(mapParams, this);
-        }
+        effect.buildSpellAbility(this);
     }
 
     @Override
@@ -105,12 +100,12 @@ public final class AbilitySub extends SpellAbility implements java.io.Serializab
     }
 
     @Override
-    protected IHasSVars getSVarFallback() {
+    protected List<IHasSVars> getSVarFallback(final String name) {
         // fused or spliced
         if (getRootAbility().getCardState() != getCardState()) {
-            return getCardState();
+            return Lists.newArrayList(getCardState());
         }
-        return super.getSVarFallback();
+        return super.getSVarFallback(name);
     }
 
     /** {@inheritDoc} */

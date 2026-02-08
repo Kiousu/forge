@@ -1,18 +1,18 @@
 package forge.item.generation;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.Iterables;
 import forge.StaticData;
 import forge.card.PrintSheet;
 import forge.item.PaperCard;
 import forge.item.SealedTemplate;
 import forge.util.ItemPool;
+import forge.util.IterableUtil;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.Predicate;
 
 
 public class UnOpenedProduct implements IUnOpenedProduct {
@@ -35,7 +35,7 @@ public class UnOpenedProduct implements IUnOpenedProduct {
         sheets = null;
     }
 
-    // Invoke this constructor only if you are sure that the pool is not equal to deafult carddb
+    // Invoke this constructor only if you are sure that the pool is not equal to default carddb
     public UnOpenedProduct(SealedTemplate template, ItemPool<PaperCard> pool) {
         this(template, pool.toFlatList());
     }
@@ -47,7 +47,7 @@ public class UnOpenedProduct implements IUnOpenedProduct {
     }
 
     public UnOpenedProduct(SealedTemplate sealedProductTemplate, Predicate<PaperCard> filterPrinted) {
-        this(sealedProductTemplate, Iterables.filter(StaticData.instance().getCommonCards().getAllCards(), filterPrinted));
+        this(sealedProductTemplate, IterableUtil.filter(StaticData.instance().getCommonCards().getAllCards(), filterPrinted));
     }
 
     private void prebuildSheets(Iterable<PaperCard> sourceList) {

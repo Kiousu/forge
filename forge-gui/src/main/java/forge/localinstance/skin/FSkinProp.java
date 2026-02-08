@@ -22,7 +22,11 @@ import java.util.Map;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 
+import forge.card.CardType;
+import forge.card.MagicColor;
 import forge.card.mana.ManaCostShard;
+import forge.deck.DeckSection;
+import forge.game.zone.ZoneType;
 import forge.localinstance.properties.ForgeConstants;
 
 /**
@@ -90,13 +94,27 @@ public enum FSkinProp {
     IMG_HDZONE_GRAVEYARD (new int[] {132, 6, 128, 128}, PropType.BUTTONS),
 
     IMG_ZONE_ANTE        (new int[] {360, 0, 40, 40}, PropType.IMAGE),
+    IMG_HDZONE_ANTE      (new int[] {384, 384, 128, 128}, PropType.ZONES),
 
     IMG_ZONE_SIDEBOARD   (new int[] {360, 40, 40, 40}, PropType.IMAGE),
     IMG_HDZONE_SIDEBOARD (new int[] {132, 1792, 128, 128}, PropType.BUTTONS),
 
     IMG_HDZONE_MANAPOOL  (new int[] {2, 6, 128, 128}, PropType.BUTTONS),
 
-    IMG_ZONE_POISON      (new int[] {320, 80, 40, 40}, PropType.IMAGE),
+    //Some of these also serve as deck section icons in the deck builder.
+    IMG_ZONE_COMMAND     (new int[] {384, 128, 128, 128}, PropType.ZONES),
+    IMG_ZONE_AVATAR      (new int[] {0, 256, 128, 128}, PropType.ZONES),
+    IMG_ZONE_SCHEME      (new int[] {128, 256, 128, 128}, PropType.ZONES),
+    IMG_ZONE_PLANAR      (new int[] {256, 256, 128, 128}, PropType.ZONES),
+    IMG_ZONE_CONSPIRACY  (new int[] {384, 256, 128, 128}, PropType.ZONES),
+    IMG_ZONE_ATTRACTION  (new int[] {0, 384, 128, 128}, PropType.ZONES),
+    IMG_ZONE_CONTRAPTION (new int[] {128, 384, 128, 128}, PropType.ZONES),
+    IMG_ZONE_STICKER     (new int[] {256, 384, 128, 128}, PropType.ZONES),
+    IMG_ZONE_DUNGEON     (new int[] {0, 512, 128, 128}, PropType.ZONES),
+    IMG_ZONE_SCRAPYARD   (new int[] {128, 512, 128, 128}, PropType.ZONES),
+    IMG_ZONE_JUNKYARD    (new int[] {256, 512, 128, 128}, PropType.ZONES),
+
+    IMG_POISON           (new int[] {320, 80, 40, 40}, PropType.IMAGE),
     IMG_TICKET           (new int[] {360, 80, 40, 40}, PropType.IMAGE),
     IMG_RAD              (new int[] {360, 120, 40, 40}, PropType.IMAGE),
 
@@ -251,7 +269,6 @@ public enum FSkinProp {
 
     //choice-search-misc
     ICO_HDCHOICE     (new int[] {2, 1792, 128, 128}, PropType.BUTTONS),
-    ICO_HDSIDEBOARD  (new int[] {132, 1792, 128, 128}, PropType.BUTTONS),
     ICO_HDPREFERENCE (new int[] {262, 1792, 128, 128}, PropType.BUTTONS),
     ICO_HDIMPORT     (new int[] {2, 1922, 128, 128}, PropType.BUTTONS),
     ICO_HDEXPORT     (new int[] {132, 1922, 128, 128}, PropType.BUTTONS),
@@ -607,7 +624,7 @@ public enum FSkinProp {
         return coords[3];
     }
 
-    public static Map<ManaCostShard, FSkinProp> SHARD_IMG = ImmutableMap.<ManaCostShard, FSkinProp>builder()
+    public static final Map<ManaCostShard, FSkinProp> SHARD_IMG = ImmutableMap.<ManaCostShard, FSkinProp>builder()
             .put(ManaCostShard.WHITE, IMG_MANA_W)
             .put(ManaCostShard.BLUE, IMG_MANA_U)
             .put(ManaCostShard.BLACK, IMG_MANA_B)
@@ -660,7 +677,7 @@ public enum FSkinProp {
 
             .build();
 
-    public static Map<String, FSkinProp> MANA_IMG = Maps.newHashMap();
+    public static final Map<String, FSkinProp> MANA_IMG = Maps.newHashMap();
     static {
         for (Map.Entry<ManaCostShard, FSkinProp> e : SHARD_IMG.entrySet()) {
             MANA_IMG.put(e.getKey().getImageKey(), e.getValue());
@@ -692,6 +709,65 @@ public enum FSkinProp {
         MANA_IMG.put("AL6OFF", FSkinProp.IMG_ATTR_6_OFF);
     }
 
+    public static FSkinProp iconFromColor(MagicColor.Color color) {
+        return switch (color) {
+            case WHITE -> IMG_MANA_W;
+            case BLUE -> IMG_MANA_U;
+            case BLACK -> IMG_MANA_B;
+            case RED -> IMG_MANA_R;
+            case GREEN -> IMG_MANA_G;
+            case COLORLESS -> IMG_MANA_COLORLESS;
+        };
+    }
+
+    public static FSkinProp iconFromCoreType(CardType.CoreType core) {
+        return switch (core) {
+            case Artifact -> IMG_ARTIFACT;
+            case Creature -> IMG_CREATURE;
+            case Enchantment -> IMG_ENCHANTMENT;
+            case Instant -> IMG_INSTANT;
+            case Land -> IMG_LAND;
+            case Planeswalker -> IMG_PLANESWALKER;
+            case Sorcery -> IMG_SORCERY;
+            case Battle -> IMG_BATTLE;
+            default -> null;
+        };
+    }
+
+    public static FSkinProp iconFromZone(ZoneType zoneType, boolean hdbuttons) {
+        return switch (zoneType) {
+            case Hand -> hdbuttons ? IMG_HDZONE_HAND : IMG_ZONE_HAND;
+            case Library -> hdbuttons ? IMG_HDZONE_LIBRARY : IMG_ZONE_LIBRARY;
+            case Graveyard -> hdbuttons ? IMG_HDZONE_GRAVEYARD : IMG_ZONE_GRAVEYARD;
+            case Exile -> hdbuttons ? IMG_HDZONE_EXILE : IMG_ZONE_EXILE;
+            case Sideboard -> hdbuttons ? IMG_HDZONE_SIDEBOARD : IMG_ZONE_SIDEBOARD;
+            case Flashback -> hdbuttons ? IMG_HDZONE_FLASHBACK : IMG_ZONE_FLASHBACK;
+            case Command -> IMG_ZONE_COMMAND; //IMG_PLANESWALKER
+            case PlanarDeck -> IMG_ZONE_PLANAR;
+            case SchemeDeck -> IMG_ZONE_SCHEME;
+            case AttractionDeck -> IMG_ZONE_ATTRACTION;
+            case ContraptionDeck -> IMG_ZONE_CONTRAPTION;
+            case Ante -> IMG_ZONE_ANTE;
+            case Junkyard ->IMG_ZONE_JUNKYARD;
+            default -> IMG_HDZONE_LIBRARY;
+        };
+    }
+
+    public static FSkinProp iconFromDeckSection(DeckSection deckSection, boolean hdbuttons) {
+        return switch (deckSection) {
+            case Main -> hdbuttons ? IMG_HDZONE_LIBRARY : ICO_DECKLIST;
+            case Sideboard -> hdbuttons ? IMG_HDZONE_SIDEBOARD : IMG_ZONE_SIDEBOARD;
+            case Commander -> IMG_ZONE_COMMAND;
+            case Avatar -> IMG_ZONE_AVATAR;
+            case Conspiracy -> IMG_ZONE_CONSPIRACY;
+            case Planes -> IMG_ZONE_PLANAR;
+            case Schemes -> IMG_ZONE_SCHEME;
+            case Attractions -> IMG_ZONE_ATTRACTION;
+            case Contraptions -> IMG_ZONE_CONTRAPTION;
+            default -> IMG_HDZONE_SIDEBOARD;
+        };
+    }
+
     public enum PropType {
         BACKGROUND(null),
         COLOR(null),
@@ -714,6 +790,7 @@ public enum FSkinProp {
         DECKBOX(ForgeConstants.SPRITE_DECKBOX_FILE),
         SETLOGO(ForgeConstants.SPRITE_SETLOGO_FILE),
         WATERMARKS(ForgeConstants.SPRITE_WATERMARK_FILE),
+        ZONES(ForgeConstants.SPRITE_ZONE_FILE),
         DRAFTRANKS(ForgeConstants.SPRITE_DRAFTRANKS_FILE),
         FAVICON(ForgeConstants.SPRITE_FAVICONS_FILE);
 

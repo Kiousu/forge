@@ -25,9 +25,11 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.util.Collection;
 import java.util.List;
+import java.util.function.Function;
 
 import javax.swing.AbstractListModel;
 import javax.swing.DefaultListCellRenderer;
+import javax.swing.ImageIcon;
 import javax.swing.JList;
 import javax.swing.ListCellRenderer;
 import javax.swing.ListSelectionModel;
@@ -36,14 +38,18 @@ import javax.swing.WindowConstants;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 
-import com.google.common.base.Function;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
+import forge.card.CardType;
+import forge.card.MagicColor;
+import forge.localinstance.skin.FSkinProp;
 import forge.toolbox.FList;
 import forge.toolbox.FMouseAdapter;
 import forge.toolbox.FOptionPane;
 import forge.toolbox.FScrollPane;
+import forge.toolbox.FSkin;
+import forge.util.ITranslatable;
 import forge.util.Localizer;
 
 /**
@@ -100,9 +106,7 @@ public class ListChooser<T> {
             this.lstChoices.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         }
 
-        if (display != null) {
-            this.lstChoices.setCellRenderer(new TransformedCellRenderer(display));
-        }
+        this.lstChoices.setCellRenderer(new TransformedCellRenderer(display));
 
         final FScrollPane listScroller = new FScrollPane(this.lstChoices, true);
         int minWidth = this.lstChoices.getAutoSizeWidth();
@@ -152,16 +156,13 @@ public class ListChooser<T> {
 
     /** @return boolean */
     public boolean show() {
-        return show(list.get(0));
+        return show(null);
     }
 
     /**
      * Shows the dialog and returns after the dialog was closed.
-     *
-     * @param index0 index to select when shown
-     * @return a boolean.
      */
-    public boolean show(final T item) {
+    public boolean show(final Collection<T> item) {
         if (this.called) {
             throw new IllegalStateException("Already shown");
         }
@@ -169,8 +170,12 @@ public class ListChooser<T> {
         do {
             //invoke later so selected item not set until dialog open
             SwingUtilities.invokeLater(() -> {
-                if (list.contains(item)) {
-                    lstChoices.setSelectedValue(item, true);
+                if (item != null) {
+                    int[] indices = item.stream()
+                            .mapToInt(list::indexOf)
+                            .filter(i -> i >= 0)
+                            .toArray();
+                    lstChoices.setSelectedIndices(indices);
                 }
                 else {
                     lstChoices.setSelectedIndex(0);
@@ -304,8 +309,31 @@ public class ListChooser<T> {
          */
         @Override
         public Component getListCellRendererComponent(final JList<? extends T> list, final T value, final int index, final boolean isSelected, final boolean cellHasFocus) {
-            // TODO Auto-generated method stub
-            return defRenderer.getListCellRendererComponent(list, transformer.apply(value), index, isSelected, cellHasFocus);
+            Component result = defRenderer.getListCellRendererComponent(list, getLabel(value), index, isSelected, cellHasFocus);
+            if (value instanceof MagicColor.Color c) {
+                defRenderer.setIcon(fromSkinProp(FSkinProp.iconFromColor(c)));
+            }
+            if (value instanceof CardType.CoreType c) {
+                defRenderer.setIcon(fromSkinProp(FSkinProp.iconFromCoreType(c)));
+            }
+            return result;
+        }
+
+        protected ImageIcon fromSkinProp(FSkinProp prop) {
+            if (prop == null) {
+                return null;
+            }
+            return FSkin.getImage(prop, 24, 24).getIcon();
+        }
+
+        protected String getLabel(final T value) {
+            if (transformer != null) {
+                return transformer.apply(value);
+            }
+            if (value instanceof ITranslatable t) {
+                return t.getTranslatedName();
+            }
+            return value != null ? value.toString() : "";
         }
     }
 }

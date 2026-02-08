@@ -17,12 +17,7 @@
  */
 package forge.gamemodes.match.input;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-
 import com.google.common.collect.Sets;
-
 import forge.game.GameEntity;
 import forge.game.GameEntityView;
 import forge.game.card.Card;
@@ -35,12 +30,17 @@ import forge.game.event.GameEventCombatUpdate;
 import forge.game.keyword.Keyword;
 import forge.game.player.Player;
 import forge.game.player.PlayerView;
+import forge.game.staticability.StaticAbilityMustAttack;
 import forge.game.zone.ZoneType;
 import forge.gui.events.UiEventAttackerDeclared;
 import forge.player.PlayerControllerHuman;
 import forge.util.ITriggerEvent;
 import forge.util.Localizer;
 import forge.util.collect.FCollectionView;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 
 /**
  * <p>
@@ -120,13 +120,26 @@ public class InputAttack extends InputSyncronizedBase {
     }
 
     void alphaStrike() {
-        //alpha strike
         final List<Player> defenders = playerAttacks.getOpponents();
         final Set<CardView> refreshCards = Sets.newHashSet();
 
         for (final Card c : playerAttacks.getCreaturesInPlay()) {
             if (combat.isAttacking(c)) {
                 continue;
+            }
+
+            final List<GameEntity> mustAttack = StaticAbilityMustAttack.entitiesMustAttack(c);
+            if (!mustAttack.isEmpty()) {
+                for (final GameEntity defender : mustAttack) {
+                    if (combat.getDefenders().contains(defender) && CombatUtil.canAttack(c, defender)) {
+                        combat.addAttacker(c, defender);
+                        refreshCards.add(CardView.get(c));
+                        break;
+                    }
+                }
+                if (combat.isAttacking(c)) {
+                    continue;
+                }
             }
 
             if (currentDefender != null && CombatUtil.canAttack(c, currentDefender)) {
@@ -320,7 +333,7 @@ public class InputAttack extends InputSyncronizedBase {
     private boolean isBandingPossible() {
         final CardCollectionView possibleAttackers = playerAttacks.getCardsIn(ZoneType.Battlefield);
         for (final Card c : possibleAttackers) {
-            if ((c.hasKeyword(Keyword.BANDING) || c.hasStartOfKeyword("Bands with Other")) &&
+            if ((c.hasKeyword(Keyword.BANDING) || c.hasKeyword(Keyword.BANDSWITH)) &&
                     CombatUtil.canAttack(c, currentDefender)) {
                 return true;
             }

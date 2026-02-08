@@ -1,7 +1,11 @@
 package forge.screens.match;
 
+import static forge.Forge.getLocalizer;
+
+import forge.toolbox.FOptionPane;
 import java.util.*;
 import java.util.Map.Entry;
+import java.util.function.Consumer;
 
 import com.badlogic.gdx.math.Vector2;
 import forge.adventure.scene.GameScene;
@@ -15,6 +19,7 @@ import forge.gui.interfaces.IGuiGame;
 import forge.screens.match.views.VField;
 import forge.screens.match.views.VReveal;
 import forge.toolbox.FDisplayObject;
+import forge.util.CardRendererUtils;
 import forge.util.Utils;
 import forge.util.collect.FCollectionView;
 import org.apache.commons.lang3.tuple.Pair;
@@ -32,7 +37,6 @@ import forge.assets.FSkinColor.Colors;
 import forge.assets.FSkinTexture;
 import forge.game.GameView;
 import forge.game.card.CardView;
-import forge.game.combat.CombatView;
 import forge.game.phase.PhaseType;
 import forge.game.player.PlayerView;
 import forge.game.zone.ZoneType;
@@ -53,7 +57,6 @@ import forge.screens.match.views.VCardDisplayArea.CardAreaPanel;
 import forge.screens.match.views.VDevMenu;
 import forge.screens.match.views.VGameMenu;
 import forge.screens.match.views.VLog;
-import forge.screens.match.views.VManaPool;
 import forge.screens.match.views.VPhaseIndicator.PhaseLabel;
 import forge.screens.match.views.VPlayerPanel;
 import forge.screens.match.views.VPlayerPanel.InfoTab;
@@ -65,7 +68,6 @@ import forge.sound.MusicPlaylist;
 import forge.sound.SoundSystem;
 import forge.toolbox.FCardPanel;
 import forge.toolbox.FScrollPane;
-import forge.util.Callback;
 
 public class MatchScreen extends FScreen {
     public static FSkinColor getBorderColor() {
@@ -90,6 +92,11 @@ public class MatchScreen extends FScreen {
     private ViewWinLose viewWinLose = null;
     private static List<FDisplayObject> potentialListener;
     private int selectedPlayer;
+
+
+    private final Map<Integer, Vector2> endpoints;
+    private final Set<CardView> cardsonBattlefield;
+    private final Set<PlayerView> playerViewSet;
 
     public MatchScreen(List<VPlayerPanel> playerPanels0) {
         super(new FMenuBar());
@@ -137,7 +144,7 @@ public class MatchScreen extends FScreen {
         players.setDropDownContainer(this);
         revealed = new VReveal();
         revealed.setDropDownContainer(this);
-        log = new VLog();
+        log = new VLog(() -> MatchController.instance.getGameView().getGameLog());
         log.setDropDownContainer(this);
         devMenu = new VDevMenu();
         devMenu.setDropDownContainer(this);
@@ -164,6 +171,9 @@ public class MatchScreen extends FScreen {
             log.setMenuTab(new HiddenMenuTab(log));
             devMenu.setMenuTab(new HiddenMenuTab(devMenu));
         }
+        endpoints = new HashMap<>();
+        cardsonBattlefield  = new HashSet<>();
+        playerViewSet = new HashSet<>();
     }
 
     private boolean is4Player() {
@@ -304,7 +314,7 @@ public class MatchScreen extends FScreen {
     }
 
     @Override
-    public void onClose(Callback<Boolean> canCloseCallback) {
+    public void onClose(Consumer<Boolean> canCloseCallback) {
         MatchController.writeMatchPreferences();
         SoundSystem.instance.setBackgroundMusic(MusicPlaylist.MENUS);
         super.onClose(canCloseCallback);
@@ -395,36 +405,43 @@ public class MatchScreen extends FScreen {
                         if (object instanceof FCardPanel cardPanel) {
                             try {
                                 if (cardPanel.isHovered()) {
-                                    VPlayerPanel vPlayerPanel = getPlayerPanel(cardPanel.getCard().getController());
+                                    CardView cardView = cardPanel.getCard();
+                                    VPlayerPanel vPlayerPanel = getPlayerPanel(cardView.getController());
                                     if (vPlayerPanel == null)
-                                        vPlayerPanel = getPlayerPanel(cardPanel.getCard().getOwner());
+                                        vPlayerPanel = getPlayerPanel(cardView.getOwner());
                                     if (vPlayerPanel != null) {
-                                        float cardW = getHeight() * 0.45f;
+                                        boolean rotate = CardRendererUtils.needsRotation(cardView) && !Forge.magnifyShowDetails;
+                                        boolean inBattlefield = ZoneType.Battlefield.equals(cardView.getZone());
+                                        float mul = 0.45f;
+                                        float div = inBattlefield ? cardPanel.isTapped() ? 2.7f : 2.4f : 1.6f;
+                                        float adjX = rotate ? cardPanel.getWidth() / div : 0f;
+                                        float adjY = rotate ? cardPanel.getHeight() / 2.2f : 0f;
+                                        float cardW = getHeight() * mul;
                                         float cardH = FCardPanel.ASPECT_RATIO * cardW;
-                                        float cardX = !ZoneType.Battlefield.equals(cardPanel.getCard().getZone())
-                                                ? cardPanel.screenPos.x - cardW : cardPanel.screenPos.x + (cardPanel.isTapped()
-                                                ? cardPanel.getWidth() : cardPanel.getWidth() / 1.4f);
+                                        float cardX = !inBattlefield ? cardPanel.screenPos.x - (cardW + adjX)
+                                                : cardPanel.screenPos.x + (cardPanel.isTapped() ? cardPanel.getWidth()
+                                                : cardPanel.getWidth() / 1.4f) + adjX;
                                         if (vPlayerPanel.getSelectedTab() != null && vPlayerPanel.getSelectedTab().isVisible()
                                                 && cardX > vPlayerPanel.getSelectedTab().getDisplayArea().getLeft()) {
-                                            cardX = cardPanel.screenPos.x - cardW;
+                                            cardX = cardPanel.screenPos.x - (cardW + adjX);
                                         }
-                                        if ((cardX + cardW) > scroller.getWidth() + scroller.getLeft())
-                                            cardX = cardPanel.screenPos.x - cardW;
+                                        if ((cardX + cardW + adjX) > scroller.getWidth() + scroller.getLeft())
+                                            cardX = cardPanel.screenPos.x - (cardW + adjX);
                                         if (vPlayerPanel.getCommandZone() != null
                                                 && vPlayerPanel.getCommandZone().isVisible() && cardX > vPlayerPanel.getCommandZone().screenPos.x)
-                                            cardX = cardPanel.screenPos.x - cardW;
-                                        float cardY = (cardPanel.screenPos.y - cardH) + cardPanel.getHeight();
+                                            cardX = cardPanel.screenPos.x - (cardW + adjX);
+                                        float cardY = (cardPanel.screenPos.y - (cardH - adjY)) + cardPanel.getHeight();
                                         if (vPlayerPanel.getPlayer() == bottomPlayerPanel.getPlayer()) {
-                                            cardY = bottomPlayerPrompt.screenPos.y - cardH;
+                                            cardY = bottomPlayerPrompt.screenPos.y - (cardH - adjY);
                                         } else if (cardY < vPlayerPanel.getField().screenPos.y && vPlayerPanel.getPlayer() != bottomPlayerPanel.getPlayer()) {
-                                            cardY = vPlayerPanel.getField().screenPos.y;
-                                            if ((cardY + cardH) > bottomPlayerPrompt.screenPos.y)
-                                                cardY = bottomPlayerPrompt.screenPos.y - cardH;
+                                            cardY = vPlayerPanel.getField().screenPos.y - adjY;
+                                            if ((cardY + (cardH - adjY)) > bottomPlayerPrompt.screenPos.y)
+                                                cardY = bottomPlayerPrompt.screenPos.y - (cardH - adjY);
                                         }
                                         if (Forge.magnifyShowDetails)
-                                            CardImageRenderer.drawDetails(g, cardPanel.getCard(), MatchController.instance.getGameView(), false, cardX, cardY, cardW, cardH);
+                                            CardImageRenderer.drawDetails(g, cardView, MatchController.instance.getGameView(), false, cardX, cardY, cardW, cardH);
                                         else
-                                            CardRenderer.drawCard(g, cardPanel.getCard(), cardX, cardY, cardW, cardH, CardRenderer.CardStackPosition.Top, false, false, false, true);
+                                            CardRenderer.drawCard(g, cardView, cardX, cardY, cardW, cardH, CardRenderer.CardStackPosition.Top, rotate, false, false, true);
                                     }
                                 }
                             } catch (Exception e) {
@@ -458,11 +475,13 @@ public class MatchScreen extends FScreen {
     }
 
     void drawArcs(Graphics g) {
-        //get all card targeting arrow origins on the battlefield
-        final Map<Integer, Vector2> endpoints = new HashMap<>();
-        final Set<CardView> cardsonBattlefield = new HashSet<>();
-        final Set<PlayerView> playerViewSet = new HashSet<>();
         final GameView game = MatchController.instance.getGameView();
+        if (game == null)
+            return;
+        //get all card targeting arrow origins on the battlefield
+        endpoints.clear();
+        cardsonBattlefield.clear();
+        playerViewSet.clear();
         try {
             for (PlayerView p : game.getPlayers()) {
                 if (p == null)
@@ -488,13 +507,8 @@ public class MatchScreen extends FScreen {
             }
             if (endpoints.isEmpty())
                 return;
-            //draw arrows for combat
-            final CombatView combat = game.getCombat();
-            for (CardView c : cardsonBattlefield) {
-                TargetingOverlay.assembleArrows(g, c, endpoints, combat, playerViewSet);
-            }
-        } catch (Exception ignored) {
-        }
+            TargetingOverlay.assembleArrows(g, cardsonBattlefield, endpoints, game.getCombat(), playerViewSet);
+        } catch (Exception ignored) {}
     }
 
     @Override
@@ -648,7 +662,7 @@ public class MatchScreen extends FScreen {
                 break;
             case Keys.Q: //concede game on Ctrl+Q
                 if (KeyInputAdapter.isCtrlKeyDown()) {
-                    MatchController.instance.concede();
+                    confirmUserConcedes();
                     return true;
                 }
                 break;
@@ -773,18 +787,13 @@ public class MatchScreen extends FScreen {
             for (CardAreaPanel p : playerPanel.getField().getCardPanels()) {
                 p.reset();
             }
-            playerPanel.getZoneTab(ZoneType.Hand).getDisplayArea().clear();
-            playerPanel.getZoneTab(ZoneType.Library).getDisplayArea().clear();
-            playerPanel.getZoneTab(ZoneType.Graveyard).getDisplayArea().clear();
-            playerPanel.getZoneTab(ZoneType.Exile).getDisplayArea().clear();
-
+            playerPanel.resetZoneTabs();
         }
     }
 
     public void forceRevalidate() {
         for (VPlayerPanel playerPanel : getPlayerPanels().values()) {
             playerPanel.revalidate(true);
-
         }
     }
 
@@ -887,11 +896,11 @@ public class MatchScreen extends FScreen {
                             g.drawRipple(image, x, y, w, h, 1 - percentage);
                         if ("Day".equalsIgnoreCase(dt)) {
                             g.setAlphaComposite(percentage);
-                            g.drawNightDay(image, x, y, w, h, 100f, true, 1 - percentage);
+                            g.drawNightDay(image, x, y, w, h, 100f, true, 0/*1 - percentage*/); // disable extra ripples
                             g.setAlphaComposite(oldAlpha);
                         } else if ("Night".equalsIgnoreCase(dt)) {
                             g.setAlphaComposite(percentage);
-                            g.drawNightDay(image, x, y, w, h, -100f, true, 1 - percentage);
+                            g.drawNightDay(image, x, y, w, h, -100f, true, 0/*1 - percentage*/); // disable extra ripples
                             g.setAlphaComposite(oldAlpha);
                         }
                     } else {
@@ -968,8 +977,7 @@ public class MatchScreen extends FScreen {
             //overrideBG
             if (!Forge.isMobileAdventureMode) {
                 if (hasActivePlane()) {
-                    imageName = getPlaneName().replace(" ", "_").replace("'", "")
-                            .replace("-", "").replace("!", "");
+                    imageName = getPlaneName();
                     if (!plane.equals(imageName)) {
                         plane = imageName;
                         bgAnimation.progress = 0;
@@ -1132,8 +1140,8 @@ public class MatchScreen extends FScreen {
 
             //build map of all horizontal scroll panes and their current scrollWidths and adjusted X values
             Map<FScrollPane, Pair<Float, Float>> horzScrollPanes = new HashMap<>();
-            backupHorzScrollPanes(topPlayerPanel, x, horzScrollPanes);
-            backupHorzScrollPanes(bottomPlayerPanel, x, horzScrollPanes);
+            backupHorzScrollPanes(topPlayerPanel, horzScrollPanes);
+            backupHorzScrollPanes(bottomPlayerPanel, horzScrollPanes);
 
             float zoom = oldScrollHeight / (getHeight() - staticHeight);
             extraHeight += amount * zoom; //scale amount by current zoom
@@ -1161,20 +1169,9 @@ public class MatchScreen extends FScreen {
             return true;
         }
 
-        private void backupHorzScrollPanes(VPlayerPanel playerPanel, float x, Map<FScrollPane, Pair<Float, Float>> horzScrollPanes) {
-            backupHorzScrollPane(playerPanel.getField().getRow1(), x, horzScrollPanes);
-            backupHorzScrollPane(playerPanel.getField().getRow2(), x, horzScrollPanes);
-            for (InfoTab tab : playerPanel.getTabs()) {
-                if (tab.getDisplayArea() instanceof VManaPool) {
-                    continue; //don't include Mana pool in this
-                }
-                backupHorzScrollPane(tab.getDisplayArea(), x, horzScrollPanes);
-            }
-            backupHorzScrollPane(playerPanel.getCommandZone(), x, horzScrollPanes);
-        }
-
-        private void backupHorzScrollPane(FScrollPane scrollPane, float x, Map<FScrollPane, Pair<Float, Float>> horzScrollPanes) {
-            horzScrollPanes.put(scrollPane, Pair.of(scrollPane.getScrollLeft(), scrollPane.getScrollWidth()));
+        private void backupHorzScrollPanes(VPlayerPanel playerPanel, Map<FScrollPane, Pair<Float, Float>> horzScrollPanes) {
+            for(FScrollPane scrollPane : playerPanel.getAllScrollPanes())
+                horzScrollPanes.put(scrollPane, Pair.of(scrollPane.getScrollLeft(), scrollPane.getScrollWidth()));
         }
     }
 
@@ -1188,6 +1185,19 @@ public class MatchScreen extends FScreen {
                 return !MatchController.instance.getGameView().getPlanarPlayer().getCurrentPlaneName().isEmpty();
             }
         return false;
+    }
+
+    private void confirmUserConcedes() {
+        final Consumer<Boolean> callback = result -> {
+            if (result) {
+                getGameController().concede();
+            }
+        };
+
+        FOptionPane.showConfirmDialog(getLocalizer().getMessage("lblConcedeCurrentGame"),
+            getLocalizer().getMessage("lblConcedeTitle"),
+            getLocalizer().getMessage("lblConcede"),
+            getLocalizer().getMessage("lblCancel"), callback);
     }
 
     @Override

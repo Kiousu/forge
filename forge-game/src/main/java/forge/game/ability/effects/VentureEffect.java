@@ -3,16 +3,23 @@ package forge.game.ability.effects;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.TreeMap;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
-import com.google.common.base.Predicates;
+import com.google.common.collect.Lists;
 
 import forge.StaticData;
-import forge.card.CardRulesPredicates;
+import forge.card.CardRules;
+import forge.card.GamePieceType;
+import forge.card.ICardFace;
 import forge.game.Game;
 import forge.game.ability.AbilityKey;
 import forge.game.ability.SpellAbilityEffect;
 import forge.game.card.Card;
 import forge.game.card.CardCollectionView;
+import forge.game.card.CardFactory;
 import forge.game.card.CounterType;
 import forge.game.event.GameEventCardCounters;
 import forge.game.player.Player;
@@ -22,11 +29,9 @@ import forge.game.trigger.Trigger;
 import forge.game.trigger.TriggerType;
 import forge.game.trigger.WrappedAbility;
 import forge.game.zone.ZoneType;
-import forge.item.PaperCard;
 import forge.util.Localizer;
-import forge.util.PredicateString.StringOp;
 
-public class VentureEffect  extends SpellAbilityEffect {
+public class VentureEffect extends SpellAbilityEffect {
 
     private Card getDungeonCard(SpellAbility sa, Player player, Map<AbilityKey, Object> moveParams) {
         final Game game = player.getGame();
@@ -43,21 +48,30 @@ public class VentureEffect  extends SpellAbilityEffect {
             }
         }
 
-        List<PaperCard> dungeonCards = null;
+        Predicate<Map.Entry<String, CardRules>> filter;
         if (sa.hasParam("Dungeon")) {
-            dungeonCards = StaticData.instance().getVariantCards()
-                    .getAllCards(Predicates.compose(
-                            Predicates.and(CardRulesPredicates.Presets.IS_DUNGEON,
-                                    CardRulesPredicates.subType(StringOp.EQUALS, sa.getParam("Dungeon"))),
-                            PaperCard::getRules));
+            String dungeonType = sa.getParam("Dungeon");
+            filter = e -> e.getValue().getType().hasSubtype(dungeonType);
         } else {
             // Create a new dungeon card chosen by player in command zone.
-            dungeonCards = StaticData.instance().getVariantCards().getAllCards(
-                Predicates.compose(CardRulesPredicates.Presets.IS_DUNGEON, PaperCard::getRules));
-            dungeonCards.removeIf(c -> !c.getRules().isEnterableDungeon());
+            filter = e -> e.getValue().isEnterableDungeon();
         }
+        Map<ICardFace, String> mapping = StaticData.instance().getAllTokens().getRules().entrySet()
+                .stream().filter(filter).collect(Collectors.toMap(e -> e.getValue().getMainPart(), Map.Entry::getKey, (a,b) -> a, TreeMap::new));
         String message = Localizer.getInstance().getMessage("lblChooseDungeon");
-        Card dungeon = player.getController().chooseDungeon(player, dungeonCards, message);
+        ICardFace chosen = player.getController().chooseSingleCardFace(sa, Lists.newArrayList(mapping.keySet()), message);
+        if (chosen == null) {
+            return null;
+        }
+        String script = mapping.get(chosen);
+        final Card host = sa.getHostCard();
+        Card editionHost = sa.getOriginalHost();
+
+        String edition = Objects.requireNonNullElse(editionHost, host).getSetCode();
+        edition = Objects.requireNonNullElse(StaticData.instance().getCardEdition(edition).getTokenSet(script), edition);
+
+        final Card dungeon = CardFactory.getCard(StaticData.instance().getAllTokens().getToken(script, edition), player, game);
+        dungeon.setGamePieceType(GamePieceType.DUNGEON);
 
         game.getAction().moveToCommand(dungeon, sa, moveParams);
 
@@ -101,8 +115,8 @@ public class VentureEffect  extends SpellAbilityEffect {
         final Game game = player.getGame();
         Card dungeon = getDungeonCard(sa, player, moveParams);
         String room = dungeon.getCurrentRoom();
-        String nextRoom = null;
 
+        String nextRoom;
         // Determine next room to venture into
         if (room == null || room.isEmpty()) {
             SpellAbility roomSA = dungeon.getTriggers().get(0).getOverridingAbility();
@@ -115,7 +129,6 @@ public class VentureEffect  extends SpellAbilityEffect {
         // TODO: Currently play the Add Counter sound, but maybe add soundeffect for marker?
         game.fireEvent(new GameEventCardCounters(dungeon, CounterType.getType("LEVEL"), 0, 1));
 
-        // Run RoomEntered trigger
         final Map<AbilityKey, Object> runParams = AbilityKey.mapFromCard(dungeon);
         runParams.put(AbilityKey.RoomName, nextRoom);
         game.getTriggerHandler().runTrigger(TriggerType.RoomEntered, runParams, false);

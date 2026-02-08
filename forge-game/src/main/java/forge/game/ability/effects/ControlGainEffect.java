@@ -22,7 +22,6 @@ import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.TriggerType;
 import forge.game.zone.ZoneType;
-import forge.util.CardTranslation;
 import forge.util.Localizer;
 
 public class ControlGainEffect extends SpellAbilityEffect {
@@ -132,10 +131,6 @@ public class ControlGainEffect extends SpellAbilityEffect {
             tgtCards = getDefinedCards(sa);
         }
 
-        if (tgtCards != null & sa.hasParam("ControlledByTarget")) {
-            tgtCards = CardLists.filterControlledBy(tgtCards, getTargetPlayers(sa));
-        }
-
         // check for lose control criteria right away
         if (lose != null && lose.contains("LeavesPlay") && !source.isInPlay()) {
             return;
@@ -158,7 +153,7 @@ public class ControlGainEffect extends SpellAbilityEffect {
 
             if (sa.hasParam("Optional") && !activator.getController().confirmAction(sa, null,
                     Localizer.getInstance().getMessage("lblGainControlConfirm", newController,
-                            CardTranslation.getTranslatedName(tgtC.getName())), null)) {
+                            tgtC.getTranslatedName()), null)) {
                 continue;
             }
 
@@ -170,7 +165,7 @@ public class ControlGainEffect extends SpellAbilityEffect {
             tgtC.addTempController(newController, tStamp);
 
             if (bUntap) {
-                if (tgtC.untap(true)) untapped.add(tgtC);
+                if (tgtC.untap()) untapped.add(tgtC);
             }
 
             if (keywords != null) {

@@ -11,10 +11,7 @@ import forge.CardStorageReader;
 import forge.Forge;
 import forge.ImageKeys;
 import forge.adventure.data.*;
-import forge.card.CardEdition;
-import forge.card.CardRarity;
-import forge.card.CardRules;
-import forge.card.ColorSet;
+import forge.card.*;
 import forge.deck.Deck;
 import forge.deck.DeckProxy;
 import forge.deck.DeckgenUtil;
@@ -111,9 +108,12 @@ public class Config {
         currentConfig = this;
         if (FModel.getPreferences() != null)
             Lang = FModel.getPreferences().getPref(ForgePreferences.FPref.UI_LANGUAGE);
+        FileHandle file = new FileHandle(prefix + "config.json");
+        //TODO: Plane's config file should be merged with the common config file.
+        if(!file.exists())
+            file = new FileHandle(commonPrefix + "config.json");
         try {
-            configData = new Json().fromJson(ConfigData.class, new FileHandle(commonPrefix + "config.json"));
-
+            configData = new Json().fromJson(ConfigData.class, file);
         } catch (Exception e) {
             e.printStackTrace();
             configData = new ConfigData();
@@ -239,14 +239,25 @@ public class Config {
                     }
                 }
             case Standard:
-
+                // Check for edition-specific starter decks first
+                if (starterEdition != null && configData.starterDecksByEdition != null) {
+                    ObjectMap<String, String> editionDecks = configData.starterDecksByEdition.get(starterEdition.getCode());
+                    if (editionDecks != null) {
+                        for (ObjectMap.Entry<String, String> entry : editionDecks) {
+                            if (ColorSet.fromNames(entry.key.toCharArray()).getColor() == color.getColor()) {
+                                return CardUtil.getDeck(entry.value, false, false, "", false, false);
+                            }
+                        }
+                    }
+                }
+                // Fall back to default starter decks (JSON generation with edition filter)
                 for (ObjectMap.Entry<String, String> entry : difficultyData.starterDecks) {
                     if (ColorSet.fromNames(entry.key.toCharArray()).getColor() == color.getColor()) {
                         return CardUtil.getDeck(entry.value, false, false, "", false, false, starterEdition, true);
                     }
                 }
             case Chaos:
-                return DeckgenUtil.getRandomOrPreconOrThemeDeck("", false, false, false);
+                return DeckgenUtil.getRandomOrPreconOrThemeDeck("", false, false, false, configData.allowedEditions);
             case Custom:
                 return DeckProxy.getAllCustomStarterDecks().get(index).getDeck();
             case Pile:
@@ -255,6 +266,12 @@ public class Config {
                         return CardUtil.getDeck(entry.value, false, false, "", false, false);
                     }
                 }
+            case Commander:
+                for (ObjectMap.Entry<String, String> entry : difficultyData.commanderDecks) {
+                    if (ColorSet.fromNames(entry.key.toCharArray()).getColor() == color.getColor()) {
+                        return CardUtil.getDeck(entry.value, false, false, "", false, false);
+                    }
+                };
         }
         return null;
     }
@@ -356,13 +373,14 @@ public class Config {
                 final List<String> lines = FileUtil.readAllLines(new InputStreamReader(fileInputStream, Charset.forName(CardStorageReader.DEFAULT_CHARSET_NAME)), true);
                 CardRules rules = rulesReader.readCard(lines, com.google.common.io.Files.getNameWithoutExtension(cardFile.getName()));
                 rules.setCustom();
-                PaperCard card = new PaperCard(rules, CardEdition.UNKNOWN.getCode(), CardRarity.Special) {
+                PaperCard card = new PaperCard(rules, CardEdition.UNKNOWN_CODE, CardRarity.Special) {
                     @Override
                     public String getImageKey(boolean altState) {
                         return ImageKeys.ADVENTURECARD_PREFIX + getName();
                     }
                 };
-                FModel.getMagicDb().getCommonCards().addCard(card);
+                CardDb db = rules.isVariant() ? FModel.getMagicDb().getVariantCards() : FModel.getMagicDb().getCommonCards();
+                db.addCard(card);
             } catch (FileNotFoundException e) {
                 throw new RuntimeException(e);
             }

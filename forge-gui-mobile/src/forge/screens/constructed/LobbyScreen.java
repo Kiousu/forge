@@ -6,12 +6,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import com.google.common.collect.Iterables;
 import forge.player.GamePlayerUtil;
 import org.apache.commons.lang3.StringUtils;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.utils.Align;
-import com.google.common.collect.Iterables;
 
 import forge.Forge;
 import forge.Graphics;
@@ -51,6 +51,7 @@ import forge.toolbox.FScrollPane;
 import forge.util.MyRandom;
 import forge.util.TextUtil;
 import forge.util.Utils;
+import forge.util.GuiPrefBinders;
 
 public abstract class LobbyScreen extends LaunchScreen implements ILobbyView {
     private static final ForgePreferences prefs = FModel.getPreferences();
@@ -72,6 +73,8 @@ public abstract class LobbyScreen extends LaunchScreen implements ILobbyView {
     // Max games in a match frame and variables
     private final FLabel lblGamesInMatch = new FLabel.Builder().text(Forge.getLocalizer().getMessage("lblMatch") + ":").font(VARIANTS_FONT).build();
     private final FComboBox<String> cbGamesInMatch = new FComboBox<>();
+    private final GuiPrefBinders.ComboBox cbGamesInMatchBinder =
+        new GuiPrefBinders.ComboBox(FPref.UI_MATCHES_PER_GAME, cbGamesInMatch);
 
     private final List<PlayerPanel> playerPanels = new ArrayList<>(MAX_PLAYERS);
     private final FScrollPane playersScroll = new FScrollPane() {
@@ -133,8 +136,6 @@ public abstract class LobbyScreen extends LaunchScreen implements ILobbyView {
         cbGamesInMatch.addItem("1");
         cbGamesInMatch.addItem("3");
         cbGamesInMatch.addItem("5");
-        cbGamesInMatch.setSelectedItem(FModel.getPreferences().getPref((FPref.UI_MATCHES_PER_GAME)));
-        cbGamesInMatch.setChangedHandler(event -> FModel.getPreferences().setPref(FPref.UI_MATCHES_PER_GAME, cbGamesInMatch.getSelectedItem()));
 
         add(lblVariants);
         add(cbVariants);
@@ -601,6 +602,11 @@ public abstract class LobbyScreen extends LaunchScreen implements ILobbyView {
     }
 
     @Override
+    public void onActivate() {
+        cbGamesInMatchBinder.load();
+    }
+
+    @Override
     public void update(final boolean fullUpdate) {
         int playerCount = lobby.getNumberOfSlots();
 
@@ -792,7 +798,7 @@ public abstract class LobbyScreen extends LaunchScreen implements ILobbyView {
             CardPool avatarPool = new CardPool();
             avatarPool.add(playerPanel.getVanguardAvatar());
             playerDeck.putSection(DeckSection.Avatar, avatarPool);
-            VanguardAvatar = Forge.getLocalizer().getMessage("lblVanguard") + ": " + playerPanel.getVanguardAvatar().getName();
+            VanguardAvatar = Forge.getLocalizer().getMessage("lblVanguard") + ": " + playerPanel.getVanguardAvatar().getDisplayName();
             playerPanel.setVanguarAvatarName(VanguardAvatar);
         }
 
@@ -872,6 +878,7 @@ public abstract class LobbyScreen extends LaunchScreen implements ILobbyView {
         updateDeck(index);
         //fireReady(index, playerPanels.get(index).isReady());
     }
+
     public void removePlayer(final int index) {
         lobby.removeSlot(index);
     }
@@ -881,7 +888,16 @@ public abstract class LobbyScreen extends LaunchScreen implements ILobbyView {
 
     private UpdateLobbyPlayerEvent getSlot(final int index) {
         final PlayerPanel panel = playerPanels.get(index);
-        return UpdateLobbyPlayerEvent.create(panel.getType(), panel.getPlayerName(), panel.getAvatarIndex(), panel.getSleeveIndex(), panel.getTeam(), panel.isArchenemy(), panel.isReady(), panel.isDevMode(), panel.getAiOptions());
+        return UpdateLobbyPlayerEvent.create(panel.getType(),
+                panel.getPlayerName(),
+                panel.getAvatarIndex(),
+                panel.getSleeveIndex(),
+                panel.getTeam(),
+                panel.isArchenemy(),
+                panel.isReady(),
+                panel.isDevMode(),
+                panel.getAiOptions(),
+                null); // TODO implement AI profile support for mobile
     }
 
     public List<PlayerPanel> getPlayerPanels() {

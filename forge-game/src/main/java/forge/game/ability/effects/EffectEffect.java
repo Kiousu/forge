@@ -5,11 +5,10 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 
 import forge.ImageKeys;
-import forge.card.CardRarity;
+import forge.StaticData;
 import forge.game.Game;
 import forge.game.GameObject;
 import forge.game.ability.AbilityFactory;
@@ -26,6 +25,7 @@ import forge.game.staticability.StaticAbility;
 import forge.game.trigger.Trigger;
 import forge.game.trigger.TriggerHandler;
 import forge.game.zone.ZoneType;
+import forge.util.IterableUtil;
 import forge.util.TextUtil;
 import forge.util.collect.FCollection;
 
@@ -81,14 +81,13 @@ public class EffectEffect extends SpellAbilityEffect {
         }
 
         if (sa.hasParam("RememberObjects")) {
-            rememberList = new FCollection<>();
-            for (final String rem : sa.getParam("RememberObjects").split(",")) {
-                rememberList.addAll(AbilityUtils.getDefinedEntities(hostCard, rem, sa));
-            }
+            rememberList = new FCollection<>(
+                    AbilityUtils.getDefinedEntities(hostCard, sa.getParam("RememberObjects").split(" & "), sa)
+            );
 
             if (sa.hasParam("ForgetCounter")) {
                 CounterType cType = CounterType.getType(sa.getParam("ForgetCounter"));
-                rememberList = new FCollection<>(CardLists.filter(Iterables.filter(rememberList, Card.class), CardPredicates.hasCounter(cType)));
+                rememberList = new FCollection<>(CardLists.filter(IterableUtil.filter(rememberList, Card.class), CardPredicates.hasCounter(cType)));
             }
 
             // don't create Effect if there is no remembered Objects
@@ -143,15 +142,20 @@ public class EffectEffect extends SpellAbilityEffect {
         }
 
         String image;
-        if (sa.hasParam("Image")) {
-            image = ImageKeys.getTokenKey(sa.getParam("Image"));
-        } else if (name.startsWith("Emblem")) { // try to get the image from name
-            image = ImageKeys.getTokenKey(
-            TextUtil.fastReplace(
-                TextUtil.fastReplace(
-                    TextUtil.fastReplace(name.toLowerCase(), " — ", "_"),
+        if (name.startsWith("Emblem")) {
+            if (sa.hasParam("Image")) {
+                image = StaticData.instance().getOtherImageKey(sa.getParam("Image"), hostCard.getSetCode());
+            } else {
+                // try to get the image from name
+                String imageKey = TextUtil.fastReplace(
+                    TextUtil.fastReplace(
+                        TextUtil.fastReplace(name.toLowerCase(), " — ", "_"),
                         ",", ""),
-                    " ", "_").toLowerCase());
+                        " ", "_");
+                image = StaticData.instance().getOtherImageKey(imageKey, hostCard.getSetCode());
+            }
+        } else if (sa.hasParam("Image")) {
+            image = ImageKeys.getTokenKey(sa.getParam("Image"));
         } else { // use host image
             image = hostCard.getImageKey();
         }
@@ -162,11 +166,8 @@ public class EffectEffect extends SpellAbilityEffect {
 
         for (Player controller : effectOwner) {
             final Card eff = createEffect(sa, controller, name, image);
-            eff.setSetCode(hostCard.getSetCode());
-            if (name.startsWith("Emblem")) {
-                eff.setRarity(CardRarity.Common);
-            } else {
-                eff.setRarity(hostCard.getRarity());
+            if (sa.hasParam("Boon")) {
+                eff.setBoon(true);
             }
 
             // Abilities and triggers work the same as they do for Token
@@ -194,7 +195,7 @@ public class EffectEffect extends SpellAbilityEffect {
                 for (final String s : effectStaticAbilities) {
                     final StaticAbility addedStaticAbility = eff.addStaticAbility(AbilityUtils.getSVar(sa, s));
                     if (addedStaticAbility != null) { //prevent npe casting adventure card spell
-                        addedStaticAbility.putParam("EffectZone", "Command");
+                        addedStaticAbility.setActiveZone(EnumSet.of(ZoneType.Command));
                         addedStaticAbility.setIntrinsic(true);
                     }
                 }
@@ -255,7 +256,6 @@ public class EffectEffect extends SpellAbilityEffect {
                 addExileCounterTrigger(eff, sa.getParam("ExileOnCounter"));
             }
 
-            // Set Imprinted
             if (effectImprinted != null) {
                 eff.addImprintedCards(AbilityUtils.getDefinedCards(hostCard, effectImprinted, sa));
             }
@@ -267,22 +267,22 @@ public class EffectEffect extends SpellAbilityEffect {
                 }
             }
 
-            // Set Chosen Color(s)
             if (hostCard.hasChosenColor()) {
                 eff.setChosenColors(Lists.newArrayList(hostCard.getChosenColors()));
             }
 
-            // Set Chosen Cards
             if (hostCard.hasChosenCard()) {
                 eff.setChosenCards(hostCard.getChosenCards());
             }
 
-            // Set Chosen Player
             if (hostCard.hasChosenPlayer()) {
                 eff.setChosenPlayer(hostCard.getChosenPlayer());
             }
 
-            // Set Chosen Type
+            if (hostCard.getChosenDirection() != null) {
+                eff.setChosenDirection(hostCard.getChosenDirection());
+            }
+
             if (hostCard.hasChosenType()) {
                 eff.setChosenType(hostCard.getChosenType());
             }
@@ -290,12 +290,10 @@ public class EffectEffect extends SpellAbilityEffect {
                 eff.setChosenType2(hostCard.getChosenType2());
             }
 
-            // Set Chosen name
             if (hostCard.hasNamedCard()) {
                 eff.setNamedCards(Lists.newArrayList(hostCard.getNamedCards()));
             }
 
-            // chosen number
             if (sa.hasParam("SetChosenNumber")) {
                 eff.setChosenNumber(AbilityUtils.calculateAmount(hostCard, sa.getParam("SetChosenNumber"), sa));
             } else if (hostCard.hasChosenNumber()) {

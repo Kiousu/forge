@@ -253,7 +253,7 @@ public class CardStorageReader {
             sw.start();
             executeLoadTask(result, taskFiles, cdlFiles);
             sw.stop();
-            final long timeOnParse = sw.getTime();
+            final long timeOnParse = sw.getTime(TimeUnit.SECONDS);
             System.out.printf("Read cards: %s files in %d ms (%d parts) %s%n", allFiles.size(), timeOnParse, taskFiles.size(), useThreadPool ? "using thread pool" : "in same thread");
         }
 
@@ -267,7 +267,7 @@ public class CardStorageReader {
             sw.start();
             executeLoadTask(result, taskZip, cdlZip);
             sw.stop();
-            final long timeOnParse = sw.getTime();
+            final long timeOnParse = sw.getTime(TimeUnit.SECONDS);
             System.out.printf("Read cards: %s archived files in %d ms (%d parts) %s%n", this.zip.size(), timeOnParse, taskZip.size(), useThreadPool ? "using thread pool" : "in same thread");
         }
 
@@ -338,10 +338,16 @@ public class CardStorageReader {
             final int from = iPart * filesPerPart;
             final int till = iPart == maxParts - 1 ? totalFiles : from + filesPerPart;
             tasks.add(() -> {
-                final List<CardRules> res = loadCardsInRange(allFiles, from, till);
-                cdl.countDown();
-                progressObserver.report(maxParts - (int)cdl.getCount(), maxParts);
-                return res;
+                try {
+                    final List<CardRules> res = loadCardsInRange(allFiles, from, till);
+                    return res;
+                } catch (Exception ex) {
+                    throw ex;
+                } finally {
+                    // make sure to continue loading when using multiple threads
+                    cdl.countDown();
+                    progressObserver.report(maxParts - (int)cdl.getCount(), maxParts);
+                }
             });
         }
         return tasks;
@@ -385,7 +391,9 @@ public class CardStorageReader {
         try (InputStream fileInputStream = java.nio.file.Files.newInputStream(file.toPath())) {
             reader.reset();
             final List<String> lines = readScript(fileInputStream);
-            return reader.readCard(lines, Files.getNameWithoutExtension(file.getName()));
+            CardRules rules = reader.readCard(lines, Files.getNameWithoutExtension(file.getName()));
+            rules.setPath(file.getPath());
+            return rules;
         } catch (final FileNotFoundException ex) {
             throw new RuntimeException("CardReader : run error -- file not found: " + file.getPath(), ex);
         } catch (final Exception ex) {
@@ -404,7 +412,9 @@ public class CardStorageReader {
     protected final CardRules loadCard(final CardRules.Reader rulesReader, final ZipEntry entry) {
         try (InputStream zipInputStream = this.zip.getInputStream(entry)) {
             rulesReader.reset();
-            return rulesReader.readCard(readScript(zipInputStream), Files.getNameWithoutExtension(entry.getName()));
+            CardRules rules = rulesReader.readCard(readScript(zipInputStream), Files.getNameWithoutExtension(entry.getName()));
+            rules.setPath(entry.getName());
+            return rules;
         } catch (final IOException exn) {
             throw new RuntimeException(exn);
         }

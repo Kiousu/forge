@@ -1,5 +1,6 @@
 package forge.gui;
 
+import forge.util.HWInfo;
 import forge.gui.interfaces.IGuiBase;
 import forge.localinstance.properties.ForgePreferences;
 
@@ -8,14 +9,14 @@ public class GuiBase {
     private static boolean propertyConfig = true;
     private static boolean networkplay = false;
     private static boolean isAndroidport = false;
-    private static boolean isAdventureMode = false;
+    private static String adventureDirectory = null;
     private static boolean interrupted = false;
-    private static String deviceName = "";
-    private static String androidRelease = "";
     private static int androidAPI = 0;
     private static int deviceRAM = 0;
+    private static String downloadsDir = "";
     private static boolean usingAppDirectory = false;
     private static ForgePreferences forgePrefs;
+    private static HWInfo hwInfo;
 
     public static IGuiBase getInterface() { return guiInterface; }
     public static void setInterface(IGuiBase i0) { guiInterface = i0; }
@@ -28,20 +29,34 @@ public class GuiBase {
     public static void setIsAndroid(boolean value) { isAndroidport = value; }
     public static boolean isAndroid() { return isAndroidport; }
 
-    public static void setIsAdventureMode(boolean value) { isAdventureMode = value; }
-    public static boolean isAdventureMode() { return isAdventureMode; }
+    public static void setAdventureDirectory(String directory) { adventureDirectory = directory; }
+    public static String getAdventureDirectory() { return adventureDirectory; }
 
     public static void setUsingAppDirectory(boolean value) { usingAppDirectory = value; }
     public static boolean isUsingAppDirectory() { return usingAppDirectory; }
 
-    public static void setDeviceInfo(String DeviceName, String AndroidName, int AndroidAPI, int RAM) {
-        deviceName = DeviceName;
-        androidRelease = AndroidName;
+    public static void setDeviceInfo(HWInfo hw, int AndroidAPI, int RAM, String dir) {
+        hwInfo = hw;
         androidAPI = AndroidAPI;
         deviceRAM = RAM;
+        downloadsDir = dir;
     }
-    public static String getDeviceName() { return deviceName; }
-    public static String getAndroidRelease() { return androidRelease; }
+    public static String getHWInfo() {
+        if (hwInfo != null) {
+            return "##########################################\n" +
+                    "APP: Forge v." + getInterface().getCurrentVersion() +
+                    "\nDEV: " + hwInfo.device().getName() + (hwInfo.getChipset() ?
+                    "\nSOC: " + hwInfo.device().getChipset() :
+                    "\nCPU: " + hwInfo.device().getCpuDescription()) +
+                    "\nRAM: " + deviceRAM + " MB" +
+                    "\nOS: " + hwInfo.os().getRawDescription() +
+                    "\n##########################################";
+        }
+        return "";
+    }
+    public static String getDownloadsDir() {
+        return downloadsDir;
+    }
     public static int getAndroidAPILevel() { return androidAPI; }
     public static int getDeviceRAM() { return deviceRAM; }
 

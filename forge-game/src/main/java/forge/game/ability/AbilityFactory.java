@@ -20,7 +20,6 @@ package forge.game.ability;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import forge.card.CardStateName;
-import forge.card.CardType;
 import forge.game.CardTraitBase;
 import forge.game.IHasSVars;
 import forge.game.ability.effects.CharmEffect;
@@ -34,9 +33,9 @@ import forge.util.FileSection;
 import io.sentry.Breadcrumb;
 import io.sentry.Sentry;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * <p>
@@ -60,10 +59,11 @@ public final class AbilityFactory {
             "FallbackAbility", // Complex Unless costs which can be unpayable
             "ChooseSubAbility", // Can choose a player via ChoosePlayer
             "CantChooseSubAbility", // Can't choose a player via ChoosePlayer
-            "AnimateSubAbility", // For ChangeZone Effects to Animate before ETB
             "RegenerationAbility", // for Regeneration Effect
             "ReturnAbility", // for Delayed Trigger on Magpie
-            "GiftAbility" // for Promise Gift
+            "GiftAbility", // for Promise Gift
+            "VoteSubAbility", // for Vote with VoteCard
+            "VoteTiedAbility" // for fallback to Choices
         );
 
     public enum AbilityRecordType {
@@ -180,50 +180,25 @@ public final class AbilityFactory {
     }
 
     public static Cost parseAbilityCost(final CardState state, Map<String, String> mapParams, AbilityRecordType type) {
-        Cost abCost = null;
-        if (type != AbilityRecordType.SubAbility) {
-            String cost = mapParams.get("Cost");
-            if (cost == null) {
-                if (type == AbilityRecordType.Spell) {
-                    SpellAbility firstAbility = state.getFirstAbility();
-                    if (firstAbility != null && firstAbility.isSpell()) {
-                        // TODO might remove when Enchant Keyword is refactored
-                        System.err.println(state.getName() + " already has Spell using mana cost");
-                    }
-                    // for a Spell if no Cost is used, use the card states ManaCost
-                    abCost = new Cost(state.getManaCost(), false);
-                } else {
-                    throw new RuntimeException("AbilityFactory : getAbility -- no Cost in " + state.getName());
-                }
-            } else {
-                abCost = new Cost(cost, type == AbilityRecordType.Ability);
-            }
+        if (type == AbilityRecordType.SubAbility) {
+            return null;
         }
-        return abCost;
+        String cost = mapParams.get("Cost");
+        if (cost != null) {
+            return new Cost(cost, type == AbilityRecordType.Ability);
+        }
+        if (type == AbilityRecordType.Spell) {
+            // for a Spell if no Cost is used, use the card states ManaCost
+            return new Cost(state.getManaCost(), false);
+        } else {
+            throw new RuntimeException("AbilityFactory : getAbility -- no Cost in " + state.getName());
+        }
     }
 
     public static SpellAbility getAbility(AbilityRecordType type, ApiType api, Map<String, String> mapParams,
             Cost abCost, final CardState state, final IHasSVars sVarHolder) {
         final Card hostCard = state.getCard();
         TargetRestrictions abTgt = mapParams.containsKey("ValidTgts") ? readTarget(mapParams) : null;
-
-        if (api == ApiType.CopySpellAbility || api == ApiType.Counter || api == ApiType.ChangeTargets || api == ApiType.ControlSpell) {
-            // Since all "CopySpell" ABs copy things on the Stack no need for it to be everywhere
-            // Since all "Counter" or "ChangeTargets" abilities only target the Stack Zone
-            // No need to have each of those scripts have that info
-            if (abTgt != null) {
-                abTgt.setZone(ZoneType.Stack);
-            }
-        }
-
-        else if (api == ApiType.PermanentCreature || api == ApiType.PermanentNoncreature) {
-            // If API is a permanent type, and creating AF Spell
-            // Clear out the auto created SpellPermanent spell
-            if (type == AbilityRecordType.Spell
-                    && !mapParams.containsKey("SubAbility") && !mapParams.containsKey("NonBasicSpell")) {
-                hostCard.clearFirstSpell();
-            }
-        }
 
         if (abCost == null) {
             abCost = parseAbilityCost(state, mapParams, type);
@@ -253,10 +228,20 @@ public final class AbilityFactory {
             spellAbility.putParam("PlayerTurn", "True");
             spellAbility.putParam("PrecostDesc", "Forecast — ");
         }
-        if (mapParams.containsKey("Boast")) {
+        if (spellAbility.isBoast()) {
             spellAbility.putParam("PresentDefined", "Self");
             spellAbility.putParam("IsPresent", "Card.attackedThisTurn");
             spellAbility.putParam("PrecostDesc", "Boast — ");
+        }
+        if (spellAbility.isExhaust()) {
+            spellAbility.putParam("PrecostDesc", "Exhaust — ");
+        }
+        if (spellAbility.isPowerUp()) {
+            spellAbility.putParam("PrecostDesc", "Power-Up — ");
+        }
+
+        if (mapParams.containsKey("Named")) {
+            spellAbility.setName(mapParams.get("Named"));
         }
 
         // *********************************************
@@ -281,11 +266,11 @@ public final class AbilityFactory {
             }
         }
 
-        if (api == ApiType.Charm || api == ApiType.GenericChoice || api == ApiType.AssignGroup || api == ApiType.VillainousChoice) {
+        if (api == ApiType.Charm || api == ApiType.GenericChoice || api == ApiType.AssignGroup || api == ApiType.VillainousChoice || api == ApiType.Vote) {
             final String key = "Choices";
             if (mapParams.containsKey(key)) {
                 List<String> names = Lists.newArrayList(mapParams.get(key).split(","));
-                spellAbility.setAdditionalAbilityList(key, Lists.transform(names, input -> {
+                spellAbility.setAdditionalAbilityList(key, names.stream().map(input -> {
                     AbilitySub sub = getSubAbility(state, input, sVarHolder);
                     if (api == ApiType.GenericChoice) {
                         // support scripters adding restrictions to filter illegal choices
@@ -293,8 +278,7 @@ public final class AbilityFactory {
                         makeRestrictions(sub);
                     }
                     return sub;
-                }
-                ));
+                }).collect(Collectors.toList()));
             }
         }
 
@@ -334,89 +318,8 @@ public final class AbilityFactory {
     }
 
     private static TargetRestrictions readTarget(Map<String, String> mapParams) {
-        final String min = mapParams.getOrDefault("TargetMin", "1");
-        final String max = mapParams.getOrDefault("TargetMax", "1");
-
         // TgtPrompt should only be needed for more complicated ValidTgts
-        String tgtWhat = mapParams.get("ValidTgts");
-        final String prompt;
-        if (mapParams.containsKey("TgtPrompt")) {
-            prompt = mapParams.get("TgtPrompt");
-        } else if (tgtWhat.equals("Any")) {
-            prompt = "Select any target";
-        } else {
-            final String[] commonStuff = new String[] {
-                    //list of common one word non-core type ValidTgts that should be lowercase in the target prompt
-                    "Player", "Opponent", "Card", "Spell", "Permanent"
-            };
-            if (Arrays.asList(commonStuff).contains(tgtWhat) || CardType.CoreType.isValidEnum(tgtWhat)) {
-                tgtWhat = tgtWhat.toLowerCase();
-            }
-            prompt = "Select target " + tgtWhat;
-        }
-
-        TargetRestrictions abTgt = new TargetRestrictions(prompt, mapParams.get("ValidTgts").split(","), min, max);
-
-        if (mapParams.containsKey("TgtZone")) {
-            // if Targeting something not in play, this Key should be set
-            abTgt.setZone(ZoneType.listValueOf(mapParams.get("TgtZone")));
-        }
-
-        if (mapParams.containsKey("MaxTotalTargetCMC")) {
-            // only target cards up to a certain total max CMC
-            abTgt.setMaxTotalCMC(mapParams.get("MaxTotalTargetCMC"));
-        }
-
-        if (mapParams.containsKey("MaxTotalTargetPower")) {
-            // only target cards up to a certain total max power
-            abTgt.setMaxTotalPower(mapParams.get("MaxTotalTargetPower"));
-        }
-
-        // TargetValidTargeting most for Counter: e.g. target spell that targets X.
-        if (mapParams.containsKey("TargetValidTargeting")) {
-            abTgt.setSAValidTargeting(mapParams.get("TargetValidTargeting"));
-        }
-
-        if (mapParams.containsKey("TargetUnique")) {
-            abTgt.setUniqueTargets(true);
-        }
-        if (mapParams.containsKey("TargetsFromSingleZone")) {
-            abTgt.setSingleZone(true);
-        }
-        if (mapParams.containsKey("TargetsWithoutSameCreatureType")) {
-            abTgt.setWithoutSameCreatureType(true);
-        }
-        if (mapParams.containsKey("TargetsWithSameCreatureType")) {
-            abTgt.setWithSameCreatureType(true);
-        }
-        if (mapParams.containsKey("TargetsWithSameCardType")) {
-            abTgt.setWithSameCardType(true);
-        }
-        if (mapParams.containsKey("TargetsWithSameController")) {
-            abTgt.setSameController(true);
-        }
-        if (mapParams.containsKey("TargetsWithDifferentControllers")) {
-            abTgt.setDifferentControllers(true);
-        }
-        if (mapParams.containsKey("TargetsForEachPlayer")) {
-            abTgt.setForEachPlayer(true);
-        }
-        if (mapParams.containsKey("TargetsWithDifferentCMC")) {
-            abTgt.setDifferentCMC(true);
-        }
-        if (mapParams.containsKey("TargetsWithEqualToughness")) {
-            abTgt.setEqualToughness(true);
-        }
-        if (mapParams.containsKey("TargetsAtRandom")) {
-            abTgt.setRandomTarget(true);
-        }
-        if (mapParams.containsKey("RandomNumTargets")) {
-            abTgt.setRandomNumTargets(true);
-        }
-        if (mapParams.containsKey("TargetingPlayer")) {
-            abTgt.setMandatory(true);
-        }
-        return abTgt;
+        return new TargetRestrictions(mapParams);
     }
 
     /**
@@ -508,8 +411,9 @@ public final class AbilityFactory {
         AbilityRecordType leftType = AbilityRecordType.getRecordType(leftMap);
         ApiType leftApi = leftType.getApiTypeOf(leftMap);
         leftMap.put("StackDescription", leftMap.get("SpellDescription"));
-        leftMap.put("SpellDescription", "Fuse (you may cast both halves of this card from your hand).");
+        leftMap.put("SpellDescription", "Fuse (You may cast one or both halves of this card from your hand.)");
         leftMap.put("ActivationZone", "Hand");
+        leftMap.put("Secondary", "True");
 
         CardState rightState = card.getState(CardStateName.RightSplit);
         SpellAbility rightAbility = rightState.getFirstAbility();
@@ -524,8 +428,10 @@ public final class AbilityFactory {
         totalCost.add(parseAbilityCost(rightState, rightMap, rightType));
 
         final SpellAbility left = getAbility(leftType, leftApi, leftMap, totalCost, leftState, leftState);
+        left.setOriginalAbility(leftAbility);
         left.setCardState(card.getState(CardStateName.Original));
         final AbilitySub right = (AbilitySub) getAbility(AbilityRecordType.SubAbility, rightApi, rightMap, null, rightState, rightState);
+        right.setOriginalAbility(rightAbility);
         left.appendSubAbility(right);
         return left;
     }

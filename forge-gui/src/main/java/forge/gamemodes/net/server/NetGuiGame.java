@@ -1,11 +1,5 @@
 package forge.gamemodes.net.server;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-
-import com.google.common.base.Function;
-
 import forge.LobbyPlayer;
 import forge.ai.GameState;
 import forge.deck.CardPool;
@@ -26,7 +20,12 @@ import forge.localinstance.skin.FSkinProp;
 import forge.player.PlayerZoneUpdate;
 import forge.player.PlayerZoneUpdates;
 import forge.trackable.TrackableCollection;
+import forge.util.FSerializableFunction;
 import forge.util.ITriggerEvent;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 
 public class NetGuiGame extends AbstractGuiGame {
 
@@ -247,7 +246,7 @@ public class NetGuiGame extends AbstractGuiGame {
     }
 
     @Override
-    public <T> List<T> getChoices(final String message, final int min, final int max, final List<T> choices, final T selected, final Function<T, String> display) {
+    public <T> List<T> getChoices(final String message, final int min, final int max, final List<T> choices, final List<T> selected, final FSerializableFunction<T, String> display) {
         return sendAndWait(ProtocolMethod.getChoices, message, min, max, choices, selected, display);
     }
 
@@ -273,7 +272,7 @@ public class NetGuiGame extends AbstractGuiGame {
 
     @Override
     public List<CardView> manipulateCardList(final String title, final Iterable<CardView> cards, final Iterable<CardView> manipulable, final boolean toTop, final boolean toBottom, final boolean toAnywhere) {
-	return sendAndWait(ProtocolMethod.manipulateCardList, title, cards, manipulable, toTop, toBottom, toAnywhere);
+        return sendAndWait(ProtocolMethod.manipulateCardList, title, cards, manipulable, toTop, toBottom, toAnywhere);
     }
 
     @Override

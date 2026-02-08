@@ -18,9 +18,9 @@
 
 package forge.game.card;
 
-import java.util.Locale;
-
 import com.google.common.collect.ImmutableList;
+
+import java.util.Locale;
 
 /**
  * The class Counters.
@@ -28,7 +28,7 @@ import com.google.common.collect.ImmutableList;
  * @author Clemens Koza
  * @version V0.0 17.02.2010
  */
-public enum CounterEnumType {
+public enum CounterEnumType implements CounterType {
 
     M1M1("-1/-1", "-1/-1", 255, 110, 106),
     P1P1("+1/+1", "+1/+1", 96, 226, 23),
@@ -79,6 +79,8 @@ public enum CounterEnumType {
 
     CARRION("CRRON", 255, 163, 222),
 
+    CELL ("CELL", 90, 10, 95),
+
     CHARGE("CHARG", 246, 192, 0),
 
     CHORUS("CHRUS", 0, 192, 246),
@@ -88,6 +90,8 @@ public enum CounterEnumType {
     COLLECTION("CLLCT", 255, 215, 0),
 
     COMPONENT("COMPN", 224, 160, 48),
+
+    CONQUEROR("CONQR", 225, 210, 25),
 
     CONTESTED("CONTES", 255, 76, 2),
 
@@ -165,7 +169,11 @@ public enum CounterEnumType {
 
     FILIBUSTER("FLBTR", 255, 179, 119),
 
+    FILM("FILM", 255, 255, 255),
+
     FINALITY("FINAL", 255, 255, 255),
+
+    FIRE("FIRE", 240, 30, 35),
 
     FLAME("FLAME", 255, 143, 43),
     
@@ -313,6 +321,8 @@ public enum CounterEnumType {
 
     PAIN("PAIN", 255, 108, 111),
 
+    PALLIATION("PALLI", 114, 243, 250),
+
     PARALYZATION("PRLYZ", 220, 201, 0),
 
     PETAL("PETAL", 255, 162, 216),
@@ -330,6 +340,8 @@ public enum CounterEnumType {
     PHYLACTERY("PHYLA", 117, 219, 153),
 
     PHYRESIS("PHYRE", 125, 97, 128),
+
+    PLAN("PLAN", 20, 35, 235),
 
     POINT("POINT", 153, 255, 130),
 
@@ -354,6 +366,8 @@ public enum CounterEnumType {
     P2P2("+2/+2", "+2/+2", 96, 226, 23),
 
     QUEST("QUEST", 251, 189, 0),
+
+    RALLY("RALLY", 25, 230, 225),
 
     RELEASE("RELEASE", 200, 210, 50),
 
@@ -458,6 +472,8 @@ public enum CounterEnumType {
     WIND("WIND", 0, 236, 255),
 
     WISH("WISH", 255, 85, 206),
+    
+    WRECK("WRECK", 208, 55, 255),
 
     // Player Counters
 
@@ -471,23 +487,6 @@ public enum CounterEnumType {
 
     TICKET("TICKET"),
 
-    // Keyword Counters
-/*
-    FLYING("Flying"),
-    FIRSTSTRIKE("First Strike"),
-    DOUBLESTRIKE("Double Strike"),
-    DEATHTOUCH("Deathtouch"),
-    HASTE("Haste"),
-    HEXPROOF("Hexproof"),
-    INDESTRUCTIBLE("Indestructible"),
-    LIFELINK("Lifelink"),
-    MENACE("Menace"),
-    REACH("Reach"),
-    TRAMPLE("Trample"),
-    VIGILANCE("Vigilance")
-    SHADOW("Shadow")
-    EXALTED("Exalted")
-//*/
     ;
 
     private String name, counterOnCardDisplayName;
@@ -545,5 +544,15 @@ public enum CounterEnumType {
     }
 
     public static final ImmutableList<CounterEnumType> values = ImmutableList.copyOf(values());
+
+    @Override
+    public boolean is(CounterEnumType eType) {
+        return this == eType;
+    }
+
+    @Override
+    public boolean isKeywordCounter() {
+        return false;
+    }
 
 }

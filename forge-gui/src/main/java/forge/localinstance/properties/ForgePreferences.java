@@ -25,7 +25,7 @@ public class ForgePreferences extends PreferencesStore<ForgePreferences.FPref> {
     /**
      * Preference identifiers and their default values.
      */
-    public enum FPref {
+    public enum FPref implements PreferencesStore.IPref {
         PLAYER_NAME (""),
         CONSTRUCTED_P1_DECK_STATE(""),
         CONSTRUCTED_P2_DECK_STATE(""),
@@ -92,11 +92,12 @@ public class ForgePreferences extends PreferencesStore<ForgePreferences.FPref> {
         UI_OVERLAY_CARD_ID ("true"),
         UI_OVERLAY_ABILITY_ICONS("true"),
         UI_OVERLAY_DRAFT_RANKING("true"),
-        UI_ENABLE_ONLINE_IMAGE_FETCHER ("false"),
+        UI_ENABLE_ONLINE_IMAGE_FETCHER ("true"),
         UI_PREFERRED_ART("LATEST_ART_ALL_EDITIONS"),
         UI_SMART_CARD_ART("false"),
         UI_AUTO_AIDECK_SELECTION("true"),
         UI_DISABLE_CARD_IMAGES ("false"),
+        UI_REVERSE_PROMPT_BUTTON ("false"),
         UI_IMAGE_CACHE_MAXIMUM("400"),
         UI_OVERLAY_FOIL_EFFECT ("true"),
         UI_HIDE_REMINDER_TEXT ("false"),
@@ -105,6 +106,7 @@ public class ForgePreferences extends PreferencesStore<ForgePreferences.FPref> {
         UI_SR_OPTIMIZE ("false"),
         UI_OPEN_PACKS_INDIV ("false"),
         UI_STACK_CREATURES ("false"),
+        UI_TOKENS_IN_SEPARATE_ROW("false"),
         UI_UPLOAD_DRAFT ("false"),
         UI_SCALE_LARGER ("true"),
         UI_RENDER_BLACK_BORDERS ("true"),
@@ -119,12 +121,8 @@ public class ForgePreferences extends PreferencesStore<ForgePreferences.FPref> {
         UI_CARD_SIZE ("small"),
         UI_SINGLE_CARD_ZOOM("false"),
         UI_LIBGDX_TEXTURE_FILTERING("true"),
-        UI_BUGZ_NAME (""),
-        UI_BUGZ_PWD (""),
         UI_ANTE ("false"),
         UI_ANTE_MATCH_RARITY ("false"),
-        UI_MANABURN("false"),
-        LEGACY_ORDER_COMBATANTS("false"),
         UI_SKIN ("Default"),
         UI_CJK_FONT (""),
         UI_PREFERRED_AVATARS_ONLY ("false"),
@@ -148,7 +146,6 @@ public class ForgePreferences extends PreferencesStore<ForgePreferences.FPref> {
         UI_STACK_EFFECT_NOTIFICATION_POLICY ("Never"),
         UI_LAND_PLAYED_NOTIFICATION_POLICY ("Never"),
         UI_PAUSE_WHILE_MINIMIZED("false"),
-        UI_TOKENS_IN_SEPARATE_ROW("false"), // Display tokens in their own battlefield row.
         UI_DISPLAY_CURRENT_COLORS(ForgeConstants.DISP_CURRENT_COLORS_NEVER),
         UI_FILTER_LANDS_BY_COLOR_IDENTITY("true"),
         UI_ALLOW_ESC_TO_END_TURN ("false"),
@@ -186,6 +183,8 @@ public class ForgePreferences extends PreferencesStore<ForgePreferences.FPref> {
     	UI_SELECT_FROM_CARD_DISPLAYS("true"),
         UI_FOR_TOUCHSCREN("false"),
         UI_SWITCH_STATES_DECKVIEW("Switch back on hover"),
+        UI_ORDER_HAND("false"),
+        UI_ENABLE_AI_PICKER("false"),
 
         UI_VIBRATE_ON_LIFE_LOSS("true"),
         UI_VIBRATE_ON_LONG_PRESS("true"),
@@ -197,7 +196,6 @@ public class ForgePreferences extends PreferencesStore<ForgePreferences.FPref> {
         CHECK_SNAPSHOT_AT_STARTUP("true"),
 
         MATCH_HOT_SEAT_MODE("false"), //this only applies to mobile game
-        MATCHPREF_PROMPT_FREE_BLOCKS("false"),
 
         NEW_GAME_SCREEN("Constructed"),
         LOAD_GAME_SCREEN("BoosterDraft"),
@@ -214,10 +212,14 @@ public class ForgePreferences extends PreferencesStore<ForgePreferences.FPref> {
 
         MATCH_AI_SIDEBOARDING_MODE("Human For AI"),
         MATCH_EXPERIMENTAL_RESTORE("false"),
+        MATCH_AI_TIMEOUT("5"),
         ENFORCE_DECK_LEGALITY ("true"),
         PERFORMANCE_MODE ("false"),
         FILTERED_HANDS ("false"),
         MULLIGAN_RULE(MulliganDefs.getDefaultRule().name()),
+
+        UI_MANABURN("false"),
+        LEGACY_ORDER_COMBATANTS("false"),
 
         DEV_MODE_ENABLED ("false"),
         DEV_WORKSHOP_SYNTAX ("false"),
@@ -225,6 +227,7 @@ public class ForgePreferences extends PreferencesStore<ForgePreferences.FPref> {
 
         LOAD_CARD_SCRIPTS_LAZILY ("false"),
         LOAD_ARCHIVED_FORMATS ("false"),
+        PRELOAD_CUSTOM_DRAFTS ("false"),
 
         DECK_DEFAULT_CARD_LIMIT ("4"),
         DECKGEN_SINGLETONS ("false"),
@@ -236,7 +239,7 @@ public class ForgePreferences extends PreferencesStore<ForgePreferences.FPref> {
         PHASE_AI_DRAW ("false"),
         PHASE_AI_MAIN1 ("false"),
         PHASE_AI_BEGINCOMBAT ("true"),
-        PHASE_AI_DECLAREATTACKERS ("false"),
+        PHASE_AI_DECLAREATTACKERS ("true"),
         PHASE_AI_DECLAREBLOCKERS ("true"),
         PHASE_AI_FIRSTSTRIKE ("false"),
         PHASE_AI_COMBATDAMAGE ("false"),
@@ -291,7 +294,9 @@ public class ForgePreferences extends PreferencesStore<ForgePreferences.FPref> {
         SHORTCUT_AUTOYIELD_ALWAYS_NO ("78"),
         SHORTCUT_MACRO_RECORD ("16 82"),
         SHORTCUT_MACRO_NEXT_ACTION ("16 50"),
-        SHORTCUT_CARD_ZOOM("90");
+        SHORTCUT_CARD_ZOOM("90"),
+
+        LAST_IMPORTED_CUBE_ID("");
 
         private final String strDefaultVal;
 
@@ -299,6 +304,7 @@ public class ForgePreferences extends PreferencesStore<ForgePreferences.FPref> {
             this.strDefaultVal = s0;
         }
 
+        @Override
         public String getDefault() {
             return strDefaultVal;
         }

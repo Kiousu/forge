@@ -17,51 +17,56 @@
  */
 package forge.game.card;
 
-import java.util.Collection;
-import java.util.Map;
-import java.util.Set;
-
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
-
-import forge.card.CardEdition;
-import forge.card.CardRarity;
-import forge.card.CardStateName;
-import forge.card.CardType;
-import forge.card.CardTypeView;
-import forge.card.MagicColor;
+import forge.card.*;
 import forge.card.mana.ManaCost;
 import forge.game.CardTraitBase;
 import forge.game.ForgeScript;
 import forge.game.GameObject;
 import forge.game.IHasSVars;
+import forge.game.ability.AbilityFactory;
 import forge.game.ability.ApiType;
 import forge.game.card.CardView.CardStateView;
+import forge.game.keyword.IKeywordsChange;
 import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordCollection;
 import forge.game.keyword.KeywordInterface;
+import forge.game.keyword.KeywordWithType;
 import forge.game.player.Player;
 import forge.game.replacement.ReplacementEffect;
+import forge.game.spellability.LandAbility;
 import forge.game.spellability.SpellAbility;
-import forge.game.spellability.SpellAbilityPredicates;
 import forge.game.spellability.SpellPermanent;
 import forge.game.staticability.StaticAbility;
 import forge.game.trigger.Trigger;
+import forge.util.CardTranslation;
 import forge.util.ITranslatable;
+import forge.util.IterableUtil;
 import forge.util.collect.FCollection;
 import forge.util.collect.FCollectionView;
 import io.sentry.Breadcrumb;
 import io.sentry.Sentry;
+
 import org.apache.commons.lang3.StringUtils;
 
-public class CardState extends GameObject implements IHasSVars, ITranslatable {
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Predicate;
+
+public class CardState implements GameObject, IHasSVars, ITranslatable {
     private String name = "";
     private CardType type = new CardType(false);
+    private CardTypeView changedType = null;
     private ManaCost manaCost = ManaCost.NO_COST;
-    private byte color = MagicColor.COLORLESS;
+    private ColorSet color = ColorSet.C;
     private String oracleText = "";
     private String functionalVariantName = null;
+    private String flavorName = null;
     private int basePower = 0;
     private int baseToughness = 0;
     private String basePowerString = null;
@@ -71,29 +76,36 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
     private KeywordCollection intrinsicKeywords = new KeywordCollection();
     private Set<Integer> attractionLights = null;
 
-    private final FCollection<SpellAbility> nonManaAbilities = new FCollection<>();
-    private final FCollection<SpellAbility> manaAbilities = new FCollection<>();
+    private final FCollection<SpellAbility> abilities = new FCollection<>();
     private FCollection<Trigger> triggers = new FCollection<>();
     private FCollection<ReplacementEffect> replacementEffects = new FCollection<>();
     private FCollection<StaticAbility> staticAbilities = new FCollection<>();
     private String imageKey = "";
     private Map<String, String> sVars = Maps.newTreeMap();
+    private Map<String, SpellAbility> abilityForTrigger = Maps.newHashMap();
 
     private KeywordCollection cachedKeywords = new KeywordCollection();
 
     private CardRarity rarity = CardRarity.Unknown;
-    private String setCode = CardEdition.UNKNOWN.getCode();
+    private String setCode = CardEdition.UNKNOWN_CODE;
 
     private final CardStateView view;
     private final Card card;
 
+    private SpellAbility landAbility;
+    private SpellAbility auraAbility;
+    private SpellAbility permanentAbility;
+
     private ReplacementEffect loyaltyRep;
     private ReplacementEffect defenseRep;
-    private ReplacementEffect battleTypeRep;
     private ReplacementEffect sagaRep;
+    private ReplacementEffect adventureRep;
+    private ReplacementEffect omenRep;
 
     private SpellAbility manifestUp;
     private SpellAbility cloakUp;
+
+    private LandTraitChanges landTraitChanges = new LandTraitChanges(this);
 
     public CardState(Card card, CardStateName name) {
         this(card.getView().createAlternateState(name), card);
@@ -132,7 +144,14 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
     }
 
     public CardTypeView getTypeWithChanges() {
-        return getType().getTypeWithChanges(card.getChangedCardTypes());
+        return Objects.requireNonNullElse(this.changedType, getType());
+    }
+
+    public void updateTypes() {
+        this.changedType = getType().getTypeWithChanges(card.getChangedCardTypes());
+    }
+    public void updateTypesForView() {
+        view.updateType(this);
     }
 
     public final CardTypeView getType() {
@@ -140,12 +159,14 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
     }
     public final void addType(String type0) {
         if (type.add(type0)) {
-            view.updateType(this);
+            updateTypes();
+            updateTypesForView();
         }
     }
     public final void addType(Iterable<String> type0) {
         if (type.addAll(type0)) {
-            view.updateType(this);
+            updateTypes();
+            updateTypesForView();
         }
     }
     public final void setType(final CardType type0) {
@@ -156,12 +177,14 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
         if (type0.isEmpty() && type.isEmpty()) { return; }
         type.clear();
         type.addAll(type0);
-        view.updateType(this);
+        updateTypes();
+        updateTypesForView();
     }
 
     public final void removeType(final CardType.Supertype st) {
         if (type.remove(st)) {
-            view.updateType(this);
+            updateTypes();
+            updateTypesForView();
         }
     }
 
@@ -170,11 +193,15 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
         if (sanisfy) {
             type.sanisfySubtypes();
         }
+
+        updateTypes();
+        updateTypesForView();
     }
 
     public final void setCreatureTypes(Collection<String> ctypes) {
         if (type.setCreatureTypes(ctypes)) {
-            view.updateType(this);
+            updateTypes();
+            updateTypesForView();
         }
     }
 
@@ -186,14 +213,14 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
         view.updateManaCost(this);
     }
 
-    public final byte getColor() {
+    public final ColorSet getColor() {
         return color;
     }
-    public final void addColor(final byte color) {
-        this.color |= color;
+    public final void addColor(final ColorSet color) {
+        this.color = ColorSet.combine(this.color, color);
         view.updateColors(card);
     }
-    public final void setColor(final byte color) {
+    public final void setColor(final ColorSet color) {
         this.color = color;
         view.updateColors(card);
     }
@@ -216,6 +243,14 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
         view.setFunctionalVariantName(functionalVariantName);
     }
 
+    public String getFlavorName() {
+        return flavorName;
+    }
+
+    public void setFlavorName(String flavorName) {
+        this.flavorName = flavorName;
+        view.updateName(this);
+    }
 
     public final int getBasePower() {
         return basePower;
@@ -268,7 +303,6 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
     public Set<Integer> getAttractionLights() {
         return this.attractionLights;
     }
-
     public final void setAttractionLights(Set<Integer> attractionLights) {
         this.attractionLights = attractionLights;
         view.updateAttractionLights(this);
@@ -296,11 +330,18 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
     public final boolean hasIntrinsicKeyword(String k) {
         return intrinsicKeywords.contains(k);
     }
+    public final boolean hasIntrinsicKeyword(Keyword k) {
+        return intrinsicKeywords.contains(k);
+    }
     public final void setIntrinsicKeywords(final Iterable<KeywordInterface> intrinsicKeyword0, final boolean lki) {
         intrinsicKeywords.clear();
         for (KeywordInterface k : intrinsicKeyword0) {
             intrinsicKeywords.insert(k.copy(card, lki));
         }
+        updateKeywordsCache();
+    }
+
+    public final void updateKeywordsCache() {
         card.updateKeywordsCache(this);
     }
 
@@ -340,6 +381,12 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
         return changed;
     }
 
+    public void addIntrinsicKeywords(Collection<KeywordInterface> intrinsicKeywords2) {
+        for (KeywordInterface inst : intrinsicKeywords2) {
+            intrinsicKeywords.insert(inst);
+        }
+    }
+
     public final boolean removeIntrinsicKeyword(final String s) {
         return intrinsicKeywords.remove(s);
     }
@@ -351,40 +398,207 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
     }
 
     public final FCollectionView<SpellAbility> getSpellAbilities() {
-        FCollection<SpellAbility> newCol = new FCollection<>(manaAbilities);
-        newCol.addAll(nonManaAbilities);
-        card.updateSpellAbilities(newCol, this, null);
+        FCollection<SpellAbility> newCol = new FCollection<>();
+        updateSpellAbilities(newCol);
+        newCol.addAll(abilities);
+        card.updateSpellAbilities(newCol, this);
         return newCol;
     }
     public final FCollectionView<SpellAbility> getManaAbilities() {
-        FCollection<SpellAbility> newCol = new FCollection<>(manaAbilities);
-        card.updateSpellAbilities(newCol, this, true);
+        FCollection<SpellAbility> newCol = new FCollection<>();
+        updateSpellAbilities(newCol);
+        newCol.addAll(abilities);
+        card.updateSpellAbilities(newCol, this);
+        newCol.removeIf(Predicate.not(SpellAbility::isManaAbility));
         return newCol;
     }
     public final FCollectionView<SpellAbility> getNonManaAbilities() {
-        FCollection<SpellAbility> newCol = new FCollection<>(nonManaAbilities);
-        card.updateSpellAbilities(newCol, this, false);
+        FCollection<SpellAbility> newCol = new FCollection<>();
+        updateSpellAbilities(newCol);
+        newCol.addAll(abilities);
+        card.updateSpellAbilities(newCol, this);
+        newCol.removeIf(SpellAbility::isManaAbility);
         return newCol;
     }
 
+    protected final void updateSpellAbilities(FCollection<SpellAbility> newCol) {
+        // add Split to Original
+        if (getStateName().equals(CardStateName.Original)) {
+            if (getCard().hasState(CardStateName.LeftSplit)) {
+                CardState leftState = getCard().getState(CardStateName.LeftSplit);
+                newCol.addAll(leftState.abilities);
+                leftState.updateSpellAbilities(newCol);
+            }
+            if (getCard().hasState(CardStateName.RightSplit)) {
+                CardState rightState = getCard().getState(CardStateName.RightSplit);
+                newCol.addAll(rightState.abilities);
+                rightState.updateSpellAbilities(newCol);
+            }
+        }
+
+        // SpellPermanent only for Original State
+        switch(getStateName()) {
+        case Backside:
+            if (!getCard().isModal()) {
+                return;
+            }
+            break;
+        case Original:
+        case LeftSplit:
+        case RightSplit:
+        case SpecializeB:
+        case SpecializeG:
+        case SpecializeR:
+        case SpecializeU:
+        case SpecializeW:
+            break;
+        default:
+            return;
+        }
+        // if card has left or right split, disable intrinsic Spell for original
+        if (getStateName().equals(CardStateName.Original) && (getCard().hasState(CardStateName.LeftSplit) || getCard().hasState(CardStateName.RightSplit))) {
+            return;
+        }
+
+        CardTypeView type = getTypeWithChanges();
+        if (type.isLand()) {
+            if (landAbility == null) {
+                landAbility = new LandAbility(card, this);
+            }
+            newCol.add(landAbility);
+        } else if (type.isAura()) {
+            newCol.add(getAuraSpell());
+        } else if (type.isPermanent()) {
+            if (abilities.anyMatch(s -> (
+                    s.isBasicSpell() && s.getSubAbility() == null && (ApiType.PermanentCreature.equals(s.getApi()) || ApiType.PermanentNoncreature.equals(s.getApi())))
+                )) {
+                return;
+            }
+
+            if (permanentAbility == null) {
+                permanentAbility = new SpellPermanent(card, this);
+            }
+            newCol.add(permanentAbility);
+        }
+    }
+
+    public LandTraitChanges getLandTraitChanges() { return this.landTraitChanges; }
+
+    record LandTraitChanges(CardState state, Map<MagicColor.Color, SpellAbility> map) implements ICardTraitChanges, IKeywordsChange
+    {
+        LandTraitChanges(CardState state) {
+            this(state, Maps.newEnumMap(MagicColor.Color.class));
+        }
+
+        public List<SpellAbility> applySpellAbility(List<SpellAbility> list) {
+            if (state.getCard().hasRemoveIntrinsic()) {
+                list.clear();
+            }
+            CardTypeView type = state.getTypeWithChanges();
+            if (!type.isLand()) {
+                return list;
+            }
+            for (MagicColor.Color c : MagicColor.Color.values()) {
+               if (c.getBasicLandType() == null) {
+                   continue;
+               }
+               if (type.hasSubtype(c.getBasicLandType())) {
+                   list.add(map.computeIfAbsent(c, a -> {
+                       String abString  = "AB$ Mana | Cost$ T | Produced$ " + a.getShortName() +
+                               " | Secondary$ True | SpellDescription$ Add " + a.getSymbol() + ".";
+                       SpellAbility sa = AbilityFactory.getAbility(abString, state);
+                       sa.setIntrinsic(true); // always intrinsic
+                       return sa;
+                   }));
+               }
+            }
+            return list;
+        }
+        public List<Trigger> applyTrigger(List<Trigger> list) {
+            if (state.getCard().hasRemoveIntrinsic()) {
+                list.clear();
+            }
+            return list;
+        }
+        public List<ReplacementEffect> applyReplacementEffect(List<ReplacementEffect> list) {
+            if (state.getCard().hasRemoveIntrinsic()) {
+                list.clear();
+            }
+            return list;
+        }
+        public List<StaticAbility> applyStaticAbility(List<StaticAbility> list) {
+            if (state.getCard().hasRemoveIntrinsic()) {
+                list.clear();
+            }
+            return list;
+        }
+        public void applyKeywords(KeywordCollection list) {
+            if (state.getCard().hasRemoveIntrinsic()) {
+                list.clear();
+            }
+        }
+        public LandTraitChanges copy(Card host, boolean lki) { return this; }
+    }
+
     public final Iterable<SpellAbility> getIntrinsicSpellAbilities() {
-        return Iterables.filter(getSpellAbilities(), SpellAbilityPredicates.isIntrinsic());
+        return IterableUtil.filter(getSpellAbilities(), CardTraitBase::isIntrinsic);
     }
 
     public final SpellAbility getFirstAbility() {
         return Iterables.getFirst(getIntrinsicSpellAbilities(), null);
     }
     public final SpellAbility getFirstSpellAbility() {
+        if (this.card.getCastSA() != null) {
+            return this.card.getCastSA();
+        }
         return Iterables.getFirst(getNonManaAbilities(), null);
     }
 
     public final SpellAbility getFirstSpellAbilityWithFallback() {
         SpellAbility sa = getFirstSpellAbility();
-        if (sa != null || getTypeWithChanges().isLand()) {
+        CardTypeView type = getTypeWithChanges();
+        if (sa != null || type.isLand()) {
             return sa;
         }
         // this happens if it's transformed backside (e.g. Disturbed)
-        return new SpellPermanent(getCard(), this);
+        if (type.isAura()) {
+            return getAuraSpell();
+        } else {
+            if (permanentAbility == null) {
+                permanentAbility = new SpellPermanent(card, this);
+            }
+            return permanentAbility;
+        }
+    }
+
+    public final SpellAbility getAuraSpell() {
+        CardTypeView type = getTypeWithChanges();
+        if (!type.isAura()) {
+            return null;
+        }
+        if (auraAbility == null) {
+            String desc = "";
+            String extra = "";
+            for (KeywordInterface ki : this.getCachedKeyword(Keyword.ENCHANT)) {
+                if (ki instanceof KeywordWithType kwt) {
+                    desc = kwt.getTypeDescription();
+                }
+                break;
+            }
+            if (hasSVar("AttachAITgts")) {
+                extra += " | AITgts$ " + getSVar("AttachAITgts");
+            }
+            if (hasSVar("AttachAILogic")) {
+                extra += " | AILogic$ " + getSVar("AttachAILogic");
+            }
+            if (hasSVar("AttachAIValid")) { // TODO combine with AttachAITgts
+                extra += " | AIValid$ " + getSVar("AttachAIValid");
+            }
+            String st = "SP$ Attach | ValidTgts$ Card.CanBeEnchantedBy,Player.CanBeEnchantedBy | TgtZone$ Battlefield,Graveyard | ValidTgtsDesc$ " + desc + extra;
+            auraAbility = AbilityFactory.getAbility(st, this);
+            auraAbility.setIntrinsic(true);
+        }
+        return this.auraAbility;
     }
 
     public final boolean hasSpellAbility(final SpellAbility sa) {
@@ -399,56 +613,18 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
         return false;
     }
 
-    public final void setNonManaAbilities(SpellAbility sa) {
-    	nonManaAbilities.clear();
-    	if (sa != null) {
-    	    nonManaAbilities.add(sa);
-    	}
-    }
-
     public final boolean addSpellAbility(final SpellAbility a) {
-        if (a.isManaAbility()) {
-            return manaAbilities.add(a);
-        }
-        return nonManaAbilities.add(a);
-    }
-    public final boolean removeSpellAbility(final SpellAbility a) {
-        if (a.isManaAbility()) {
-            // if (!a.isExtrinsic()) { return false; } //never remove intrinsic mana abilities, is this the way to go??
-            return manaAbilities.remove(a);
-        }
-        return nonManaAbilities.remove(a);
-    }
-    public final boolean addManaAbility(final SpellAbility a) {
-        return manaAbilities.add(a);
-    }
-    public final boolean addManaAbilities(final Iterable<SpellAbility> a) {
-        return manaAbilities.addAll(a);
-    }
-    public final boolean removeManaAbility(final SpellAbility a) {
-        return manaAbilities.remove(a);
-    }
-    public final boolean addNonManaAbility(final SpellAbility a) {
-        return nonManaAbilities.add(a);
-    }
-    public final boolean addNonManaAbilities(final Iterable<SpellAbility> a) {
-        return nonManaAbilities.addAll(a);
-    }
-    public final boolean removeNonManaAbility(final SpellAbility a) {
-        return nonManaAbilities.remove(a);
-    }
-
-    public final void clearFirstSpell() {
-        for (int i = 0; i < nonManaAbilities.size(); i++) {
-            if (nonManaAbilities.get(i).isSpell()) {
-                nonManaAbilities.remove(i);
-                return;
-            }
-        }
+        return abilities.add(a);
     }
 
     public final FCollectionView<Trigger> getTriggers() {
         FCollection<Trigger> result = new FCollection<>(triggers);
+        if (getStateName().equals(CardStateName.Original)) {
+            if (getCard().hasState(CardStateName.LeftSplit))
+                result.addAll(getCard().getState(CardStateName.LeftSplit).triggers);
+            if (getCard().hasState(CardStateName.RightSplit))
+                result.addAll(getCard().getState(CardStateName.RightSplit).triggers);
+        }
         card.updateTriggers(result, this);
         return result;
     }
@@ -466,21 +642,18 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
         return false;
     }
 
-    public final void setTriggers(final FCollection<Trigger> triggers0) {
-        triggers = triggers0;
-    }
     public final boolean addTrigger(final Trigger t) {
         return triggers.add(t);
-    }
-    public final boolean removeTrigger(final Trigger t) {
-        return triggers.remove(t);
-    }
-    public final void clearTriggers() {
-        triggers.clear();
     }
 
     public final FCollectionView<StaticAbility> getStaticAbilities() {
         FCollection<StaticAbility> result = new FCollection<>(staticAbilities);
+        if (getStateName().equals(CardStateName.Original)) {
+            if (getCard().hasState(CardStateName.LeftSplit))
+                result.addAll(getCard().getState(CardStateName.LeftSplit).staticAbilities);
+            if (getCard().hasState(CardStateName.RightSplit))
+                result.addAll(getCard().getState(CardStateName.RightSplit).staticAbilities);
+        }
         card.updateStaticAbilities(result, this);
         return result;
     }
@@ -490,23 +663,16 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
     public final boolean removeStaticAbility(StaticAbility stab) {
         return staticAbilities.remove(stab);
     }
-    public final void setStaticAbilities(final Iterable<StaticAbility> staticAbilities0) {
-        staticAbilities = new FCollection<>(staticAbilities0);
-    }
-    public final void clearStaticAbilities() {
-        staticAbilities.clear();
-    }
-
-    public final String getImageKey() {
-        return imageKey;
-    }
-    public final void setImageKey(final String imageFilename0) {
-        imageKey = imageFilename0;
-        view.updateImageKey(this);
-    }
 
     public FCollectionView<ReplacementEffect> getReplacementEffects() {
         FCollection<ReplacementEffect> result = new FCollection<>(replacementEffects);
+        // add Split to Original
+        if (getStateName().equals(CardStateName.Original)) {
+            if (getCard().hasState(CardStateName.LeftSplit))
+                result.addAll(getCard().getState(CardStateName.LeftSplit).replacementEffects);
+            if (getCard().hasState(CardStateName.RightSplit))
+                result.addAll(getCard().getState(CardStateName.RightSplit).replacementEffects);
+        }
         CardTypeView type = getTypeWithChanges();
         if (type.isPlaneswalker()) {
             if (loyaltyRep == null) {
@@ -515,39 +681,38 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
             result.add(loyaltyRep);
         }
         if (type.isBattle()) {
-            // TODO This is currently breaking for Battle/Defense
-            // Going to script the cards to work but ideally it would happen here
             if (defenseRep == null) {
                 defenseRep = CardFactoryUtil.makeEtbCounter("etbCounter:DEFENSE:" + this.baseDefense, this, true);
             }
             result.add(defenseRep);
-
-            if (battleTypeRep == null) {
-                if(type.hasSubtype("Siege")) {
-                    // battleTypeRep; // - Choose a player to protect it
-                }
-            }
-            //result.add(battleTypeRep);
-
-        }
-        if (type.hasSubtype("Saga") && !hasKeyword(Keyword.READ_AHEAD)) {
-            if (sagaRep == null) {
-                sagaRep = CardFactoryUtil.makeEtbCounter("etbCounter:LORE:1", this, true);
-            }
-            result.add(sagaRep);
         }
 
         card.updateReplacementEffects(result, this);
+
+        // below are global rules
+        if (type.hasSubtype("Saga") && !hasKeyword(Keyword.READ_AHEAD)) {
+            if (sagaRep == null) {
+                sagaRep = CardFactoryUtil.makeEtbCounter("etbCounter:LORE:1", this, false);
+            }
+            result.add(sagaRep);
+        }
+        if (type.hasSubtype("Adventure")) {
+            if (this.adventureRep == null) {
+                adventureRep = CardFactoryUtil.setupAdventureAbility(this);
+            }
+            result.add(adventureRep);
+        }
+        if (type.hasSubtype("Omen")) {
+            if (this.omenRep == null) {
+                omenRep = CardFactoryUtil.setupOmenAbility(this);
+            }
+            result.add(omenRep);
+        }
+
         return result;
     }
     public boolean addReplacementEffect(final ReplacementEffect replacementEffect) {
         return replacementEffects.add(replacementEffect);
-    }
-    public boolean removeReplacementEffect(final ReplacementEffect replacementEffect) {
-        return replacementEffects.remove(replacementEffect);
-    }
-    public void clearReplacementEffects() {
-        replacementEffects.clear();
     }
 
     public final boolean hasReplacementEffect(final ReplacementEffect re) {
@@ -568,11 +733,6 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
 
     @Override
     public final Map<String, String> getSVars() {
-        return sVars;
-    }
-
-    @Override
-    public Map<String, String> getDirectSVars() {
         return sVars;
     }
 
@@ -634,19 +794,18 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
         setBaseLoyalty(source.getBaseLoyalty());
         setBaseDefense(source.getBaseDefense());
         setAttractionLights(source.getAttractionLights());
+        setFlavorName(source.getFlavorName());
         setSVars(source.getSVars());
 
-        manaAbilities.clear();
-        for (SpellAbility sa : source.manaAbilities) {
-            if (sa.isIntrinsic()) {
-                manaAbilities.add(sa.copy(card, lki));
-            }
+        abilityForTrigger.clear();
+        for (Map.Entry<String, SpellAbility> e : source.abilityForTrigger.entrySet()) {
+            abilityForTrigger.put(e.getKey(), e.getValue().copy(card, lki));
         }
 
-        nonManaAbilities.clear();
-        for (SpellAbility sa : source.nonManaAbilities) {
+        abilities.clear();
+        for (SpellAbility sa : source.abilities) {
             if (sa.isIntrinsic()) {
-                nonManaAbilities.add(sa.copy(card, lki));
+                abilities.add(sa.copy(card, lki));
             }
         }
 
@@ -669,14 +828,24 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
                 continue;
             }
             if (tr.isIntrinsic()) {
-                triggers.add(tr.copy(card, lki));
+                triggers.add(tr.copy(card, lki, false, tr.hasParam("Execute") ? abilityForTrigger.get(tr.getParam("Execute")) : null));
             }
+        }
+        ReplacementEffect runRE = null;
+        if (ctb instanceof SpellAbility sp && sp.isReplacementAbility()
+            && source.getCard().equals(ctb.getHostCard())) {
+            runRE = sp.getReplacementEffect();
         }
 
         replacementEffects.clear();
         for (ReplacementEffect re : source.replacementEffects) {
             if (re.isIntrinsic()) {
-                replacementEffects.add(re.copy(card, lki));
+                ReplacementEffect reCopy = re.copy(card, lki);
+                if (re.equals(runRE) && runRE.hasRun()) {
+                    // CR 208.2b prevent loop from card copying itself
+                    reCopy.setHasRun(true);
+                }
+                replacementEffects.add(reCopy);
             }
         }
 
@@ -687,6 +856,16 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
             }
         }
         if (lki) {
+            this.changedType = source.changedType;
+            if (source.landAbility != null) {
+                landAbility = source.landAbility.copy(card, true);
+            }
+            if (source.auraAbility != null) {
+                auraAbility = source.auraAbility.copy(card, true);
+            }
+            if (source.permanentAbility != null) {
+                permanentAbility = source.permanentAbility.copy(card, true);
+            }
             if (source.loyaltyRep != null) {
                 loyaltyRep = source.loyaltyRep.copy(card, true);
             }
@@ -696,19 +875,19 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
             if (source.sagaRep != null) {
                 sagaRep = source.sagaRep.copy(card, true);
             }
+            if (source.adventureRep != null) {
+                adventureRep = source.adventureRep.copy(card, true);
+            }
+            if (source.omenRep != null) {
+                omenRep = source.omenRep.copy(card, true);
+            }
         }
     }
 
     public final void addAbilitiesFrom(final CardState source, final boolean lki) {
-        for (SpellAbility sa : source.manaAbilities) {
-            if (sa.isIntrinsic()) {
-                manaAbilities.add(sa.copy(card, lki));
-            }
-        }
-
-        for (SpellAbility sa : source.nonManaAbilities) {
+        for (SpellAbility sa : source.abilities) {
             if (sa.isIntrinsic() && sa.getApi() != ApiType.PermanentCreature && sa.getApi() != ApiType.PermanentNoncreature) {
-                nonManaAbilities.add(sa.copy(card, lki));
+                abilities.add(sa.copy(card, lki));
             }
         }
 
@@ -736,8 +915,17 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
     }
 
     public CardState copy(final Card host, CardStateName name, final boolean lki) {
+        return copy(host, name, lki, null);
+    }
+    public CardState copy(final Card host, final CardTraitBase ctb) {
+        return copy(host, this.getStateName(), false, ctb);
+    }
+    public CardState copy(final Card host, CardStateName name, final CardTraitBase ctb) {
+        return copy(host, name, false, ctb);
+    }
+    public CardState copy(final Card host, CardStateName name, final boolean lki, final CardTraitBase ctb) {
         CardState result = new CardState(host, name);
-        result.copyFrom(this, lki);
+        result.copyFrom(this, lki, ctb);
         return result;
     }
 
@@ -757,6 +945,14 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
         view.updateSetCode(this);
     }
 
+    public final String getImageKey() {
+        return imageKey;
+    }
+    public final void setImageKey(final String imageFilename0) {
+        imageKey = imageFilename0;
+        view.updateImageKey(this);
+    }
+
     /* (non-Javadoc)
      * @see forge.game.GameObject#hasProperty(java.lang.String, forge.game.player.Player, forge.game.card.Card, forge.game.spellability.SpellAbility)
      */
@@ -765,16 +961,9 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
         return ForgeScript.cardStateHasProperty(this, property, sourceController, source, spellAbility);
     }
 
-    public void addIntrinsicKeywords(Collection<KeywordInterface> intrinsicKeywords2) {
-        for (KeywordInterface inst : intrinsicKeywords2) {
-            intrinsicKeywords.insert(inst);
-        }
-    }
-
     public ImmutableList<CardTraitBase> getTraits() {
         return ImmutableList.<CardTraitBase>builder()
-                .addAll(manaAbilities)
-                .addAll(nonManaAbilities)
+                .addAll(abilities)
                 .addAll(triggers)
                 .addAll(replacementEffects)
                 .addAll(staticAbilities)
@@ -806,6 +995,10 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
         }
     }
 
+    public final boolean hasChapter() {
+        return getTriggers().anyMatch(Trigger::isChapter);
+    }
+
     public final int getFinalChapterNr() {
         int n = 0;
         for (final Trigger t : getTriggers()) {
@@ -829,11 +1022,16 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
         return cloakUp;
     }
 
+    public SpellAbility getAbilityForTrigger(String svar) {
+        return abilityForTrigger.computeIfAbsent(svar, s -> AbilityFactory.getAbility(getCard(), s, this));
+    }
+
     @Override
     public String getTranslationKey() {
+        String displayName = flavorName == null ? name : flavorName;
         if(StringUtils.isNotEmpty(functionalVariantName))
-            return name + " $" + functionalVariantName;
-        return name;
+            return displayName + " $" + functionalVariantName;
+        return displayName;
     }
 
     @Override
@@ -842,7 +1040,7 @@ public class CardState extends GameObject implements IHasSVars, ITranslatable {
     }
 
     @Override
-    public String getUntranslatedOracle() {
-        return getOracleText();
+    public String getTranslatedName() {
+        return CardTranslation.getTranslatedName(this);
     }
 }

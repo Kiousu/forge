@@ -5,6 +5,7 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Batch;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -17,6 +18,7 @@ import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.scenes.scene2d.utils.ScissorStack;
+import com.badlogic.gdx.utils.Disposable;
 import forge.adventure.util.Config;
 import forge.assets.FImage;
 import forge.assets.FSkinColor;
@@ -33,7 +35,7 @@ public class Graphics {
     private static final int GL_BLEND = GL20.GL_BLEND;
     private static final int GL_LINE_SMOOTH = 2848; //create constant here since not in GL20
 
-    private final SpriteBatch batch = new SpriteBatch();
+    private final Batch batch = new SpriteBatch();
     private final ShapeRenderer shapeRenderer = new ShapeRenderer();
     private final Deque<Matrix4> Dtransforms = new ArrayDeque<>();
     private final Vector3 tmp = new Vector3();
@@ -54,6 +56,7 @@ public class Graphics {
     private final ShaderProgram shaderChromaticAbberation = new ShaderProgram(Shaders.vertPixelateShader, Shaders.fragChromaticAbberation);
     private final ShaderProgram shaderHueShift = new ShaderProgram(Shaders.vertPixelateShader, Shaders.fragHueShift);
     private final ShaderProgram shaderRoundedRect = new ShaderProgram(Shaders.vertPixelateShader, Shaders.fragRoundedRect);
+    private final ShaderProgram shaderRoundedRect2 = new ShaderProgram(Shaders.vertPixelateShader, Shaders.fragRoundedRect2);
     private final ShaderProgram shaderNoiseFade = new ShaderProgram(Shaders.vertPixelateShader, Shaders.fragNoiseFade);
     private final ShaderProgram shaderPortal = new ShaderProgram(Shaders.vertPixelateShader, Shaders.fragPortal);
     private final ShaderProgram shaderPixelateSimple = new ShaderProgram(Shaders.vertPixelateShader, Shaders.fragPixelateSimple);
@@ -105,16 +108,22 @@ public class Graphics {
     }
 
     public void dispose() {
-        batch.dispose();
-        shapeRenderer.dispose();
-        shaderOutline.dispose();
-        shaderGrayscale.dispose();
-        shaderUnderwater.dispose();
-        shaderWarp.dispose();
-        if (dummyTexture != null) dummyTexture.dispose();
+        safeDispose(shaderOutline, shaderGrayscale, shaderWarp, shaderUnderwater, shaderNightDay,
+                shaderPixelate, shaderRipple, shaderPixelateWarp, shaderChromaticAbberation, shaderHueShift,
+                shaderRoundedRect, shaderRoundedRect2, shaderNoiseFade, shaderPortal, dummyTexture);
     }
 
-    public SpriteBatch getBatch() {
+    public void safeDispose(Disposable... disposables) {
+        for (Disposable d : disposables) {
+            if (d != null) {
+                try {
+                    d.dispose();
+                } catch (Exception ignored) {}
+            }
+        }
+    }
+
+    public Batch getBatch() {
         return batch;
     }
 
@@ -317,24 +326,14 @@ public class Graphics {
     }
 
     public void drawLineArrow(float arrowThickness, FSkinColor skinColor, float x1, float y1, float x2, float y2) {
-        fillCircle(skinColor.getColor(), x2, y2, arrowThickness);
         drawLineArrow(arrowThickness, skinColor.getColor(), x1, y1, x2, y2);
-        fillCircle(Color.WHITE, x2, y2, arrowThickness / 2);
-        drawLineArrow(arrowThickness / 3, Color.WHITE, x1, y1, x2, y2);
-        //drawLine(arrowThickness / 3, Color.WHITE, x1, y1, x2, y2);
     }
 
     public void drawLineArrow(float thickness, Color color, float x1, float y1, float x2, float y2) {
         batch.end(); //must pause batch while rendering shapes
+        float ct = thickness / 2;
+        float lt = thickness / 3;
 
-        /*float angle = new Vector2(x1 - x2, y1 - y2).angleRad();
-        float arrowHeadRotation = (float) (Math.PI * 0.8f);
-        Vector2 arrowCorner3 = new Vector2(x2 + (thickness / 3) * (float) Math.cos(angle + arrowHeadRotation), y2 + (thickness / 3) * (float) Math.sin(angle + arrowHeadRotation));
-        Vector2 arrowCorner4 = new Vector2(x2 + (thickness / 3) * (float) Math.cos(angle - arrowHeadRotation), y2 + (thickness / 3) * (float) Math.sin(angle - arrowHeadRotation));*/
-
-        if (thickness > 1) {
-            Gdx.gl.glLineWidth(thickness);
-        }
         if (alphaComposite < 1) {
             color = FSkinColor.alphaColor(color, color.a * alphaComposite);
         }
@@ -345,9 +344,26 @@ public class Graphics {
         if (needSmoothing) {
             Gdx.gl.glEnable(GL_LINE_SMOOTH);
         }
+        startShape(ShapeType.Filled);
+        shapeRenderer.setColor(color);
+        shapeRenderer.circle(adjustX(x2), adjustY(y2, 0), thickness);
+        shapeRenderer.setColor(Color.WHITE);
+        shapeRenderer.circle(adjustX(x2), adjustY(y2, 0), ct);
+        endShape();
 
+        if (thickness > 1) {
+            Gdx.gl.glLineWidth(thickness);
+        }
         startShape(ShapeType.Line);
         shapeRenderer.setColor(color);
+        shapeRenderer.line(adjustX(x1), adjustY(y1, 0), adjustX(x2), adjustY(y2, 0));
+        endShape();
+
+        if (lt > 1) {
+            Gdx.gl.glLineWidth(lt);
+        }
+        startShape(ShapeType.Line);
+        shapeRenderer.setColor(Color.WHITE);
         shapeRenderer.line(adjustX(x1), adjustY(y1, 0), adjustX(x2), adjustY(y2, 0));
         endShape();
 
@@ -910,13 +926,40 @@ public class Graphics {
         batch.begin();
     }
 
-    public void drawCardRoundRect(Texture image, TextureRegion damage_overlay, float x, float y, float w, float h, boolean drawGray, boolean damaged) {
+    public void drawFoil(float x, float y, float w, float h, float radius) {
+        drawFoil(x, y, w, h, radius, false);
+    }
+
+    public void drawFoil(float x, float y, float w, float h, float radius, boolean rotate) {
+        Texture image = Forge.getAssets().getHolofoil();
         if (image == null)
             return;
         batch.end();
+        shaderRoundedRect2.bind();
+        shaderRoundedRect2.setUniformf("u_resolution", image.getWidth(), image.getHeight());
+        shaderRoundedRect2.setUniformf("edge_radius", (float)(image.getHeight() / image.getWidth()) * radius);
+        shaderRoundedRect2.setUniformf("u_time", Forge.hueFragTime);
+        batch.setShader(shaderRoundedRect2);
+        batch.begin();
+        //draw
+        if (rotate)
+            drawRotatedImage(image, x, y, w, h, x + w / 2, y + h / 2, 0, 0, image.getWidth(), image.getHeight(), 90);
+        else
+            batch.draw(image, adjustX(x), adjustY(y, h), w, h);
+        //reset
+        batch.end();
+        batch.setShader(null);
+        batch.begin();
+    }
+
+    public void drawCardRoundRect(Texture image, TextureRegion damage_overlay, float x, float y, float w, float h, boolean drawGray, boolean damaged, boolean foilEffect) {
+        if (image == null)
+            return;
+        float radius = ImageCache.getInstance().getRadius(image);
+        batch.end();
         shaderRoundedRect.bind();
         shaderRoundedRect.setUniformf("u_resolution", image.getWidth(), image.getHeight());
-        shaderRoundedRect.setUniformf("edge_radius", (float)(image.getHeight() / image.getWidth()) * ImageCache.getInstance().getRadius(image));
+        shaderRoundedRect.setUniformf("edge_radius", (float)(image.getHeight() / image.getWidth()) * radius);
         shaderRoundedRect.setUniformf("u_gray", drawGray ? 0.8f : 0f);
         batch.setShader(shaderRoundedRect);
         batch.begin();
@@ -926,22 +969,31 @@ public class Graphics {
         batch.end();
         batch.setShader(null);
         batch.begin();
+        if (foilEffect && !drawGray) {
+            drawFoil(x, y, w, h, radius);
+        }
         if (damage_overlay != null && damaged)
             batch.draw(damage_overlay, adjustX(x), adjustY(y, h), w, h);
     }
 
     public void drawCardRoundRect(Texture image, float x, float y, float w, float h, float originX, float originY, float rotation) {
+        drawCardRoundRect(image, x, y, w, h, originX, originY, rotation, 1f, false);
+    }
+
+    public void drawCardRoundRect(Texture image, float x, float y, float w, float h, float originX, float originY, float rotation, float modR, boolean drawFoil) {
         if (image == null)
             return;
         batch.end();
         shaderRoundedRect.bind();
         shaderRoundedRect.setUniformf("u_resolution", image.getWidth(), image.getHeight());
-        shaderRoundedRect.setUniformf("edge_radius", (float)(image.getHeight() / image.getWidth()) * ImageCache.getInstance().getRadius(image));
+        shaderRoundedRect.setUniformf("edge_radius", (float)(image.getHeight() / image.getWidth()) * (ImageCache.getInstance().getRadius(image) * modR));
         shaderRoundedRect.setUniformf("u_gray", 0f);
         batch.setShader(shaderRoundedRect);
         batch.begin();
         //draw
         drawRotatedImage(image, x, y, w, h, originX, originY, 0, 0, image.getWidth(), image.getHeight(), rotation);
+        if (drawFoil)
+            drawFoil(x, y, w, h, modR, true);
         //reset
         batch.end();
         batch.setShader(null);
@@ -1265,13 +1317,25 @@ public class Graphics {
     }
 
     public void drawImage(Texture image, float x, float y, float w, float h) {
+        drawImage(image, x, y, w, h, false);
+    }
+
+    public void drawImage(Texture image, float x, float y, float w, float h, boolean drawFoil) {
         if (image != null)
             batch.draw(image, adjustX(x), adjustY(y, h), w, h);
+        if (drawFoil)
+            drawFoil(x, y, w, h, 0f);
     }
 
     public void drawImage(TextureRegion image, float x, float y, float w, float h) {
+        drawImage(image, x, y, w, h, false);
+    }
+
+    public void drawImage(TextureRegion image, float x, float y, float w, float h, boolean drawFoil) {
         if (image != null)
             batch.draw(image, adjustX(x), adjustY(y, h), w, h);
+        if (drawFoil)
+            drawFoil(x, y, w, h, 0f);
     }
 
     public void drawImage(TextureRegion image, TextureRegion glowImageReference, float x, float y, float w, float h, Color glowColor, boolean selected) {
@@ -1501,7 +1565,7 @@ public class Graphics {
     }
 
     public Color borderLining(String c) {
-        if (c == null || c == "")
+        if (c == null || "".equals(c))
             return Color.valueOf("#fffffd");
         int c_r = Integer.parseInt(c.substring(0, 2), 16);
         int c_g = Integer.parseInt(c.substring(2, 4), 16);

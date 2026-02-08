@@ -16,7 +16,6 @@ import forge.game.player.Player;
 import forge.game.player.PlayerView;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
-import forge.util.CardTranslation;
 import forge.util.Lang;
 import forge.util.Localizer;
 import forge.util.TextUtil;
@@ -36,7 +35,7 @@ public class DigEffect extends SpellAbilityEffect {
         } else {
             final int numToDig = AbilityUtils.calculateAmount(host, sa.getParam("DigNum"), sa);
             final String toChange = sa.getParamOrDefault("ChangeNum", "1");
-            final int numToChange = toChange.startsWith("All") ? numToDig : AbilityUtils.calculateAmount(host, sa.getParam("ChangeNum"), sa);
+            final int numToChange = toChange.equals("All") || toChange.equals("Any") ? numToDig : AbilityUtils.calculateAmount(host, sa.getParam("ChangeNum"), sa);
 
             String verb = " looks at ";
             if (sa.hasParam("DestinationZone") && sa.getParam("DestinationZone").equals("Exile") &&
@@ -120,14 +119,13 @@ public class DigEffect extends SpellAbilityEffect {
         final int libraryPosition = sa.hasParam("LibraryPosition") ? Integer.parseInt(sa.getParam("LibraryPosition")) : -1;
         final int libraryPosition2 = sa.hasParam("LibraryPosition2") ? Integer.parseInt(sa.getParam("LibraryPosition2")) : -1;
 
-        int destZone1ChangeNum = 1;
         String changeValid = sa.getParamOrDefault("ChangeValid", "");
-        final boolean anyNumber = sa.hasParam("AnyNumber");
         final boolean optional = sa.hasParam("Optional");
         final boolean skipReorder = sa.hasParam("SkipReorder");
 
         // A hack for cards like Explorer's Scope that need to ensure that a card is revealed to the player activating the ability
-        final boolean forceRevealToController = sa.hasParam("ForceRevealToController");
+        final boolean forceReveal = sa.hasParam("ForceRevealToController")
+                || sa.hasParam("ForceReveal") || sa.hasParam("WithMayLook");
 
         // These parameters are used to indicate that a dialog box must be show to the player asking if the player wants to proceed
         // with an optional ability, otherwise the optional ability is skipped.
@@ -148,13 +146,17 @@ public class DigEffect extends SpellAbilityEffect {
             }
         }
 
-        boolean changeAll = false;
         boolean totalCMC = sa.hasParam("WithTotalCMC");
         int totcmc = AbilityUtils.calculateAmount(host, sa.getParam("WithTotalCMC"), sa);
 
+        int destZone1ChangeNum = 1;
+        boolean changeAll = false;
+        boolean anyNumber = false;
         if (sa.hasParam("ChangeNum")) {
             if (sa.getParam("ChangeNum").equalsIgnoreCase("All")) {
                 changeAll = true;
+            } else if (sa.getParam("ChangeNum").equalsIgnoreCase("Any")) {
+                anyNumber = true;
             } else {
                 destZone1ChangeNum = AbilityUtils.calculateAmount(host, sa.getParam("ChangeNum"), sa);
             }
@@ -196,7 +198,7 @@ public class DigEffect extends SpellAbilityEffect {
                 }
                 else if (!sa.hasParam("NoLooking")) {
                     // show the user the revealed cards
-                    delayedReveal = new DelayedReveal(top, srcZone, PlayerView.get(p), CardTranslation.getTranslatedName(host.getName()) + " - " + Localizer.getInstance().getMessage("lblLookingCardIn") + " ");
+                    delayedReveal = new DelayedReveal(top, srcZone, PlayerView.get(p), host.getTranslatedName() + " - " + Localizer.getInstance().getMessage("lblLookingCardIn") + " ");
                 }
 
                 if (sa.hasParam("RememberRevealed") && hasRevealed) {
@@ -215,41 +217,39 @@ public class DigEffect extends SpellAbilityEffect {
                     }
                 }
 
-                CardCollection movedCards;
                 rest.addAll(top);
-                CardCollection valid;
+                CardCollection valid = top;
+                if (totalCMC) {
+                    valid = CardLists.getValidCards(valid, "Card.cmcLE" + totcmc, cont, host, sa);
+                }
                 if (!changeValid.isEmpty()) {
                     if (changeValid.contains("ChosenType")) {
                         changeValid = changeValid.replace("ChosenType", host.getChosenType());
                     }
                     valid = CardLists.getValidCards(top, changeValid, cont, host, sa);
-                    if (totalCMC) {
-                        valid = CardLists.getValidCards(valid, "Card.cmcLE" + totcmc, cont, host, sa);
-                    }
-                } else if (totalCMC) {
-                    valid = CardLists.getValidCards(top, "Card.cmcLE" + totcmc, cont, host, sa);
-                } else {
-                    // If all the cards are valid choices, no need for a separate reveal dialog to the chooser. pfps??
-                    if (p == chooser && destZone1ChangeNum > 1) {
-                        delayedReveal = null;
-                    }
-                    valid = top;
+                } else if (!totalCMC && p == chooser && destZone1ChangeNum > 1) {
+                    // If all the cards are valid choices, no need for a separate reveal dialog to the chooser
+                    delayedReveal = null;
                 }
 
-                if (forceRevealToController) {
-                    // Force revealing the card to the player activating the ability (e.g. Explorer's Scope)
-                    game.getAction().revealTo(top, activator);
+                if (forceReveal) {
+                    // Force revealing the card to defined (e.g. Gonti, Night Minister) or the player activating the
+                    // ability (e.g. Explorer's Scope)
+                    Player revealTo = sa.hasParam("ForceReveal") ?
+                            getDefinedPlayersOrTargeted(sa, "ForceReveal").get(0) : activator;
+                    game.getAction().revealTo(top, revealTo);
                     delayedReveal = null; // top is already seen by the player, do not reveal twice
                 }
 
                 // Optional abilities that use a dialog box to prompt the user to skip the ability (e.g. Explorer's Scope, Quest for Ula's Temple)
                 if (optional && mayBeSkipped && !valid.isEmpty()) {
                     String prompt = optionalAbilityPrompt != null ? optionalAbilityPrompt : Localizer.getInstance().getMessage("lblWouldYouLikeProceedWithOptionalAbility") + " " + host + "?\n\n(" + sa.getDescription() + ")";
-                    if (!p.getController().confirmAction(sa, null, TextUtil.fastReplace(prompt, "CARDNAME", CardTranslation.getTranslatedName(host.getName())), null)) {
+                    if (!p.getController().confirmAction(sa, null, TextUtil.fastReplace(prompt, "CARDNAME", host.getTranslatedName()), null)) {
                         return;
                     }
                 }
 
+                CardCollection movedCards;
                 if (changeAll) {
                     movedCards = new CardCollection(valid);
                 } else if (sa.hasParam("RandomChange")) {
@@ -399,16 +399,6 @@ public class DigEffect extends SpellAbilityEffect {
                                 moveParams.put(AbilityKey.CounterTable, table);
                             }
                         }
-                        if (sa.hasAdditionalAbility("AnimateSubAbility")) {
-                            // need LKI before Animate does apply
-                            moveParams.put(AbilityKey.CardLKI, CardCopyService.getLKICopy(c));
-
-                            final SpellAbility animate = sa.getAdditionalAbility("AnimateSubAbility");
-                            host.addRemembered(c);
-                            AbilityUtils.resolve(animate);
-                            host.removeRemembered(c);
-                            animate.setSVar("unanimateTimestamp", String.valueOf(game.getTimestamp()));
-                        }
                         c = game.getAction().moveTo(c.getController().getZone(destZone1), c, sa, moveParams);
                         if (destZone1.equals(ZoneType.Battlefield)) {
                             if (addToCombat(c, sa, "Attacking", "Blocking")) {
@@ -430,9 +420,6 @@ public class DigEffect extends SpellAbilityEffect {
                     }
                     if (sa.hasParam("Imprint")) {
                         host.addImprintedCard(c);
-                    }
-                    if (sa.hasParam("ForgetOtherRemembered")) {
-                        host.clearRemembered();
                     }
                     if (remZone1) {
                         host.addRemembered(c);

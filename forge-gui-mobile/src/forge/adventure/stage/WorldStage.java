@@ -47,6 +47,10 @@ public class WorldStage extends GameStage implements SaveFileContent {
     private transient boolean enterSpawnPOI = false;
 
     NavArrowActor navArrow;
+    final Rectangle tempBoundingRect = new Rectangle();
+    final Vector2 enemyMoveVector = new Vector2();
+    boolean collided = false;
+
     public WorldStage() {
         super();
         background = new WorldBackground(this);
@@ -61,10 +65,6 @@ public class WorldStage extends GameStage implements SaveFileContent {
         return instance == null ? instance = new WorldStage() : instance;
     }
 
-    final Rectangle tempBoundingRect = new Rectangle();
-    final Vector2 enemyMoveVector = new Vector2();
-
-    boolean collided = false;
     @Override
     protected void onActing(float delta) {
         if (isPaused() || MapStage.getInstance().isDialogOnlyInput() || Forge.advFreezePlayerControls)
@@ -72,7 +72,7 @@ public class WorldStage extends GameStage implements SaveFileContent {
         drawNavigationArrow();
         if (player.isMoving()) {
             handleMonsterSpawn(delta);
-            handlePointsOfInterestCollision();
+            collided = collided || handlePointsOfInterestCollision();
             globalTimer += delta;
             Iterator<Pair<Float, EnemySprite>> it = enemies.iterator();
             while (it.hasNext()) {
@@ -146,6 +146,7 @@ public class WorldStage extends GameStage implements SaveFileContent {
                 pair.getValue().setAnimation(CharacterSprite.AnimationTypes.Idle);
             }
         }
+        collided = false;
     }
 
     private void removeEnemy(EnemySprite currentMob) {
@@ -161,7 +162,7 @@ public class WorldStage extends GameStage implements SaveFileContent {
     }
 
     @Override
-    public void setWinner(boolean playerIsWinner) {
+    public void setWinner(boolean playerIsWinner, boolean isArena) {
         if (playerIsWinner) {
             currentMob.clearCollisionHeight();
             Current.player().win();
@@ -191,16 +192,19 @@ public class WorldStage extends GameStage implements SaveFileContent {
                 boolean defeated = Current.player().defeated();
                 AdventureQuestController.instance().updateQuestsLose(currentMob);
                 AdventureQuestController.instance().showQuestDialogs(MapStage.getInstance());
+                boolean defeatedFromBoss = currentMob.getData().boss && !isArena;
                 WorldStage.this.removeEnemy(currentMob);
                 currentMob = null;
                 if (defeated) {
                     WorldStage.getInstance().resetPlayerLocation();
+                } else if (defeatedFromBoss) {
+                    WorldStage.getInstance().defeatedFromBoss();
                 }
             });
         }
     }
 
-    public void handlePointsOfInterestCollision() {
+    public boolean handlePointsOfInterestCollision() {
         for (Actor actor : foregroundSprites.getChildren()) {
             if (actor.getClass() == PointOfInterestMapSprite.class) {
                 PointOfInterestMapSprite point = (PointOfInterestMapSprite) actor;
@@ -215,6 +219,8 @@ public class WorldStage extends GameStage implements SaveFileContent {
                     WorldSave.getCurrentSave().autoSave();
                     loadPOI(point.getPointOfInterest());
                     point.getMapSprite().checkOut();
+                    WorldSave.getCurrentSave().getPointOfInterestChanges(point.getPointOfInterest().getID()).visit();
+                    return true;
                 } else {
                     if (point == collidingPoint) {
                         collidingPoint = null;
@@ -222,6 +228,7 @@ public class WorldStage extends GameStage implements SaveFileContent {
                 }
             }
         }
+        return false;
     }
 
     public void loadPOI(PointOfInterest poi) {
@@ -360,16 +367,6 @@ public class WorldStage extends GameStage implements SaveFileContent {
         background.setPlayerPos(player.getX(), player.getY());
         //spriteGroup.setCullingArea(new Rectangle(player.getX()-getViewport().getWorldHeight()/2,player.getY()-getViewport().getWorldHeight()/2,getViewport().getWorldHeight(),getViewport().getWorldHeight()));
         super.draw();
-        if (WorldSave.getCurrentSave().getPlayer().hasAnnounceFantasy()) {
-            MapStage.getInstance().showDeckAwardDialog("{BLINK=WHITE;RED}Chaos Mode!{ENDBLINK}\n" +
-                    "Enemy will use Preconstructed or Random Generated Decks. Genetic AI Decks will be available to some enemies on Hard difficulty.",
-                    WorldSave.getCurrentSave().getPlayer().getSelectedDeck());
-            WorldSave.getCurrentSave().getPlayer().clearAnnounceFantasy();
-        } else if (WorldSave.getCurrentSave().getPlayer().hasAnnounceCustom()) {
-            MapStage.getInstance().showDeckAwardDialog("{GRADIENT}Custom Deck Mode!{ENDGRADIENT}\n" +
-                    "Some enemies will use Genetic AI Decks randomly.", WorldSave.getCurrentSave().getPlayer().getSelectedDeck());
-            WorldSave.getCurrentSave().getPlayer().clearAnnounceCustom();
-        }
     }
 
     public void enterSpawnPOI(){
@@ -398,6 +395,8 @@ public class WorldStage extends GameStage implements SaveFileContent {
             PointOfInterest poi = Current.world().findPointsOfInterest("Spawn");
             if (poi != null) { //shouldn't be null
                 WorldStage.getInstance().loadPOI(poi);
+                // adjust player sprite to prevent triggering the poi collision point when leaving the spawn on New Game
+                WorldStage.getInstance().getPlayerSprite().storePos(poi.getPosition().x, poi.getPosition().y + 18f);
             }
         }
         else {
@@ -413,6 +412,7 @@ public class WorldStage extends GameStage implements SaveFileContent {
         setBounds(WorldSave.getCurrentSave().getWorld().getWidthInPixels(), WorldSave.getCurrentSave().getWorld().getHeightInPixels());
         GridPoint2 pos = background.translateFromWorldToChunk(player.getX(), player.getY());
         background.loadChunk(pos.x, pos.y);
+        super.enter();
     }
 
     @Override
@@ -511,6 +511,17 @@ public class WorldStage extends GameStage implements SaveFileContent {
                 if (nearestValidPOI != null) {
                     navDirection = new Vector2(nearestValidPOI.getPosition()).sub(player.pos());
                     break;
+                }
+
+                if(adq.getTargetEnemySprite() == null
+                        && adq.getActiveStages().size() > 0
+                        && adq.qualifiesForDetachedQuest(adq.getActiveStages().get(0))) {
+                    AdventureQuestStage brokenStage = adq.getActiveStages().get(0);
+                    adq.fixOrphanedHuntQuest(brokenStage);
+                    AdventureQuestController.instance().addQuestSprites(brokenStage);
+                    // When we first load, we will not do this in time to actually spawn the sprite
+                    // until the next loop, but as soon as the player moves, if the On the Hunt quest
+                    // is tracked, we will immediately point to that sprite
                 }
 
                 if (adq.getTargetEnemySprite() != null) {

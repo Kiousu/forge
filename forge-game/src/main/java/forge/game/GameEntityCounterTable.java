@@ -1,10 +1,9 @@
 package forge.game;
 
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
-import org.apache.commons.lang3.ObjectUtils;
-
-import com.google.common.base.Optional;
 import com.google.common.collect.ForwardingTable;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Maps;
@@ -39,22 +38,22 @@ public class GameEntityCounterTable extends ForwardingTable<Optional<Player>, Ga
     }
 
     public Integer put(Player putter, GameEntity object, CounterType type, Integer value) {
-        Optional<Player> o = Optional.fromNullable(putter);
+        Optional<Player> o = Optional.ofNullable(putter);
         Map<CounterType, Integer> map = get(o, object);
         if (map == null) {
             map = Maps.newHashMap();
             put(o, object, map);
         }
-        return map.put(type, ObjectUtils.firstNonNull(map.get(type), 0) + value);
+        return map.put(type, Objects.requireNonNullElse(map.get(type), 0) + value);
     }
 
     public int get(Player putter, GameEntity object, CounterType type) {
-        Optional<Player> o = Optional.fromNullable(putter);
+        Optional<Player> o = Optional.ofNullable(putter);
         Map<CounterType, Integer> map = get(o, object);
         if (map == null || !map.containsKey(type)) {
             return 0;
         }
-        return ObjectUtils.firstNonNull(map.get(type), 0);
+        return Objects.requireNonNullElse(map.get(type), 0);
     }
 
     public int totalValues() {
@@ -76,7 +75,7 @@ public class GameEntityCounterTable extends ForwardingTable<Optional<Player>, Ga
             result.putAll(ge.getCounters());
             return result;
         }
-        Map<CounterType, Integer> alreadyRemoved = column(ge).get(Optional.absent());
+        Map<CounterType, Integer> alreadyRemoved = column(ge).get(Optional.<Player>empty());
         for (Map.Entry<CounterType, Integer> e : ge.getCounters().entrySet()) {
             int rest = e.getValue() - (alreadyRemoved.getOrDefault(e.getKey(), 0));
             if (rest > 0) {
@@ -92,8 +91,8 @@ public class GameEntityCounterTable extends ForwardingTable<Optional<Player>, Ga
         for (Map.Entry<GameEntity, Map<Optional<Player>, Map<CounterType, Integer>>> gm : columnMap().entrySet()) {
             if (gm.getKey().isValid(valid, host.getController(), host, sa)) {
                 for (Map<CounterType, Integer> cm : gm.getValue().values()) {
-                    Integer old = ObjectUtils.firstNonNull(result.get(gm.getKey()), 0);
-                    Integer v = ObjectUtils.firstNonNull(cm.get(type), 0);
+                    Integer old = Objects.requireNonNullElse(result.get(gm.getKey()), 0);
+                    Integer v = Objects.requireNonNullElse(cm.get(type), 0);
                     if (old + v > 0) {
                         result.put(gm.getKey(), old + v);
                     }
@@ -159,10 +158,15 @@ public class GameEntityCounterTable extends ForwardingTable<Optional<Player>, Ga
             }
 
             // Add ETB flag
-            final Map<AbilityKey, Object> runParams = AbilityKey.newMap();
+            Map<AbilityKey, Object> runParams = AbilityKey.newMap();
             runParams.put(AbilityKey.Cause, cause);
             if (params != null) {
                 runParams.putAll(params);
+            }
+
+            boolean firstTime = false;
+            if (gm.getKey() instanceof Card c) {
+                firstTime = game.getCounterAddedThisTurn(null, c) == 0;
             }
 
             // Apply counter after replacement effect
@@ -176,11 +180,18 @@ public class GameEntityCounterTable extends ForwardingTable<Optional<Player>, Ga
                     if (cause != null && cause.hasParam("MaxFromEffect")) {
                         value = Math.min(value, Integer.parseInt(cause.getParam("MaxFromEffect")) - gm.getKey().getCounters(ec.getKey()));
                     }
-                    gm.getKey().addCounterInternal(ec.getKey(), value, e.getKey().orNull(), true, result, runParams);
+                    gm.getKey().addCounterInternal(ec.getKey(), value, e.getKey().orElse(null), true, result, runParams);
                     if (remember && ec.getValue() > 0) {
                         cause.getHostCard().addRemembered(gm.getKey());
                     }
                 }
+            }
+
+            if (result.containsColumn(gm.getKey())) {
+                runParams = AbilityKey.newMap();
+                runParams.put(AbilityKey.Object, gm.getKey());
+                runParams.put(AbilityKey.FirstTime, firstTime);
+                game.getTriggerHandler().runTrigger(TriggerType.CounterTypeAddedAll, runParams, false);
             }
         }
 

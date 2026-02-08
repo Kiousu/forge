@@ -2,14 +2,16 @@ package forge.game.keyword;
 
 import java.util.Collection;
 
+import forge.game.IHasSVars;
 import forge.game.card.Card;
+import forge.game.card.ICardTraitChanges;
 import forge.game.player.Player;
 import forge.game.replacement.ReplacementEffect;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
 import forge.game.trigger.Trigger;
 
-public interface KeywordInterface extends Cloneable {
+public interface KeywordInterface extends Cloneable, IHasSVars, ICardTraitChanges {
 
     Card getHostCard();
     void setHostCard(final Card host);
@@ -20,9 +22,11 @@ public interface KeywordInterface extends Cloneable {
 
     Keyword getKeyword();
 
+    String getTitle();
     String getReminderText();
 
     int getAmount();
+    String getAmountString();
 
     StaticAbility getStatic();
     void setStatic(StaticAbility st);
@@ -35,6 +39,8 @@ public interface KeywordInterface extends Cloneable {
 
     void createTraits(final Player player);
     void createTraits(final Player player, final boolean clear);
+
+    boolean hasTraits();
 
     void addTrigger(final Trigger trg);
 

@@ -1,9 +1,6 @@
 package forge.gamemodes.match.input;
 
-import java.util.Collection;
-
 import com.google.common.collect.Iterables;
-
 import forge.game.GameEntity;
 import forge.game.card.Card;
 import forge.game.card.CardView;
@@ -13,6 +10,8 @@ import forge.game.spellability.SpellAbility;
 import forge.localinstance.properties.ForgePreferences;
 import forge.model.FModel;
 import forge.player.PlayerControllerHuman;
+
+import java.util.Collection;
 
 public abstract class InputSelectManyBase<T extends GameEntity> extends InputSyncronizedBase {
     private static final long serialVersionUID = -2305549394512889450L;
@@ -75,7 +74,7 @@ public abstract class InputSelectManyBase<T extends GameEntity> extends InputSyn
     protected abstract String getMessage();
 
     @Override
-    public final void showMessage() {
+    public void showMessage() {
         if (FModel.getPreferences().getPrefBoolean(ForgePreferences.FPref.UI_DETAILED_SPELLDESC_IN_PROMPT) &&
                 card != null) {
             final StringBuilder sb = new StringBuilder();
@@ -102,7 +101,7 @@ public abstract class InputSelectManyBase<T extends GameEntity> extends InputSyn
     }
 
     @Override
-    protected final void onCancel() {
+    protected void onCancel() {
         bCancelled = true;
         resetUsedToPay();
         this.getSelected().clear();

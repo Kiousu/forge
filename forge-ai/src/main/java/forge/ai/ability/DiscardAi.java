@@ -4,18 +4,15 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import forge.ai.ComputerUtil;
-import forge.ai.ComputerUtilAbility;
-import forge.ai.ComputerUtilCost;
-import forge.ai.ComputerUtilMana;
-import forge.ai.SpecialCardAi;
-import forge.ai.SpellAbilityAi;
+import forge.ai.*;
 import forge.game.ability.AbilityUtils;
 import forge.game.card.Card;
 import forge.game.card.CardCollectionView;
 import forge.game.card.CardLists;
 import forge.game.card.CardPredicates;
 import forge.game.cost.Cost;
+import forge.game.cost.CostDamage;
+import forge.game.cost.CostDraw;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.player.PlayerActionConfirmMode;
@@ -24,35 +21,34 @@ import forge.game.player.PlayerPredicates;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import forge.util.MyRandom;
+import forge.util.collect.FCollectionView;
 
 public class DiscardAi extends SpellAbilityAi {
 
     @Override
-    protected boolean canPlayAI(Player ai, SpellAbility sa) {
+    protected AiAbilityDecision checkApiLogic(Player ai, SpellAbility sa) {
         final Card source = sa.getHostCard();
         final String sourceName = ComputerUtilAbility.getAbilitySourceName(sa);
-        final Cost abCost = sa.getPayCosts();
         final String aiLogic = sa.getParamOrDefault("AILogic", "");
-
-        // temporarily disabled until better AI
-        if (!willPayCosts(ai, sa, abCost, source)) {
-            return false;
-        }
 
         if ("Chandra, Flamecaller".equals(sourceName)) {
             final int hand = ai.getCardsIn(ZoneType.Hand).size();
-            return MyRandom.getRandom().nextFloat() < (1.0 / (1 + hand));
+            if (MyRandom.getRandom().nextFloat() < (1.0 / (1 + hand))) {
+                return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
+            } else {
+                return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
+            }
         }
 
         if (aiLogic.equals("VolrathsShapeshifter")) {
             return SpecialCardAi.VolrathsShapeshifter.consider(ai, sa);
         }
 
-        final boolean humanHasHand = ai.getWeakestOpponent().getCardsIn(ZoneType.Hand).size() > 0;
+        final boolean humanHasHand = !ai.getWeakestOpponent().getCardsIn(ZoneType.Hand).isEmpty();
 
         if (sa.usesTargeting()) {
             if (!discardTargetAI(ai, sa)) {
-                return false;
+                return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
             }
         } else {
             // TODO: Add appropriate restrictions
@@ -66,7 +62,7 @@ public class DiscardAi extends SpellAbilityAi {
                 } else {
                     // defined to the human, so that's fine as long the human has cards
                     if (!humanHasHand) {
-                        return false;
+                        return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
                     }
                 }
             } else {
@@ -80,13 +76,11 @@ public class DiscardAi extends SpellAbilityAi {
                 final int cardsToDiscard = Math.min(ComputerUtilCost.getMaxXValue(sa, ai, sa.isTrigger()), ai.getWeakestOpponent()
                         .getCardsIn(ZoneType.Hand).size());
                 if (cardsToDiscard < 1) {
-                    return false;
+                    return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
                 }
                 sa.setXManaCostPaid(cardsToDiscard);
-            } else {
-                if (AbilityUtils.calculateAmount(source, sa.getParam("NumCards"), sa) < 1) {
-                    return false;
-                }
+            } else if (AbilityUtils.calculateAmount(source, sa.getParam("NumCards"), sa) < 1) {
+               return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
             }
         }
 
@@ -94,7 +88,7 @@ public class DiscardAi extends SpellAbilityAi {
         if (sa.hasParam("AnyNumber")) {
             if ("DiscardUncastableAndExcess".equals(aiLogic)) {
                 final CardCollectionView inHand = ai.getCardsIn(ZoneType.Hand);
-                final int numLandsOTB = CardLists.count(ai.getCardsIn(ZoneType.Hand), CardPredicates.Presets.LANDS);
+                final int numLandsOTB = CardLists.count(ai.getCardsIn(ZoneType.Hand), CardPredicates.LANDS);
                 int numDiscard = 0;
                 int numOppInHand = 0;
                 for (Player p : ai.getGame().getPlayers()) {
@@ -115,7 +109,7 @@ public class DiscardAi extends SpellAbilityAi {
                     }
                 }
                 if (numDiscard == 0) {
-                    return false;
+                    return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
                 }
             }
         }
@@ -123,27 +117,25 @@ public class DiscardAi extends SpellAbilityAi {
         // Don't use discard abilities before main 2 if possible
         if (ai.getGame().getPhaseHandler().getPhase().isBefore(PhaseType.MAIN2)
                 && !sa.hasParam("ActivationPhases") && !aiLogic.startsWith("AnyPhase")) {
-            return false;
+            return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
         }
 
         if (aiLogic.equals("AnyPhaseIfFavored")) {
             if (ai.getGame().getCombat() != null) {
                 if (ai.getCardsIn(ZoneType.Hand).size() < ai.getGame().getCombat().getDefenderPlayerByAttacker(source).getCardsIn(ZoneType.Hand).size()) {
-                    return false;
+                    return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
                 }
             }
         }
 
         // Don't tap creatures that may be able to block
         if (ComputerUtil.waitForBlocking(sa)) {
-            return false;
+            return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
         }
-
-        boolean randomReturn = MyRandom.getRandom().nextFloat() <= Math.pow(0.9, sa.getActivationsThisTurn());
 
         // some other variables here, like handsize vs. maxHandSize
 
-        return randomReturn;
+        return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
     }
 
     private boolean discardTargetAI(final Player ai, final SpellAbility sa) {
@@ -168,7 +160,7 @@ public class DiscardAi extends SpellAbilityAi {
     }
 
     @Override
-    protected boolean doTriggerAINoCost(Player ai, SpellAbility sa, boolean mandatory) {
+    protected AiAbilityDecision doTriggerNoCost(Player ai, SpellAbility sa, boolean mandatory) {
         if (sa.usesTargeting()) {
             PlayerCollection targetableOpps = ai.getOpponents().filter(PlayerPredicates.isTargetableBy(sa));
             Player opp = targetableOpps.min(PlayerPredicates.compareByLife());
@@ -178,7 +170,7 @@ public class DiscardAi extends SpellAbilityAi {
                 } else if (mandatory && sa.canTarget(ai)) {
                     sa.getTargets().add(ai);
                 } else {
-                    return false;
+                    return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
                 }
             }
         } else {
@@ -186,7 +178,7 @@ public class DiscardAi extends SpellAbilityAi {
             	if ("AtLeast2".equals(sa.getParam("AILogic"))) {
             		final List<Player> players = AbilityUtils.getDefinedPlayers(sa.getHostCard(), sa.getParam("Defined"), sa);
             		if (players.isEmpty() || players.get(0).getCardsIn(ZoneType.Hand).size() < 2) {
-            			return false;
+            			return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
             		}
             	}
             }
@@ -198,18 +190,22 @@ public class DiscardAi extends SpellAbilityAi {
             }
         }
 
-        return true;
+        return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
     }
 
     @Override
-    public boolean chkAIDrawback(SpellAbility sa, Player ai) {
+    public AiAbilityDecision chkDrawback(Player ai, SpellAbility sa) {
         // Drawback AI improvements
         // if parent draws cards, make sure cards in hand + cards drawn > 0
         if (sa.usesTargeting()) {
-            return discardTargetAI(ai, sa);
+            if (discardTargetAI(ai, sa)) {
+                return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
+            } else {
+                return new AiAbilityDecision(0, AiPlayDecision.TargetingFailed);
+            }
         }
         // TODO: check for some extra things
-        return true;
+        return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
     }
 
     public boolean confirmAction(Player player, SpellAbility sa, PlayerActionConfirmMode mode, String message, Map<String, Object> params) {
@@ -218,5 +214,58 @@ public class DiscardAi extends SpellAbilityAi {
             return true;
         }
         return super.confirmAction(player, sa, mode, message, params);
+    }
+
+    @Override
+    public boolean willPayUnlessCost(Player payer, SpellAbility sa, Cost cost, boolean alreadyPaid, FCollectionView<Player> payers) {
+        final Card host = sa.getHostCard();
+        final String aiLogic = sa.getParam("UnlessAI");
+        if ("Never".equals(aiLogic)) { return false; }
+
+        CardCollectionView hand = payer.getCardsIn(ZoneType.Hand);
+
+        if ("Hand".equals(sa.getParam("Mode"))) {
+            if (hand.size() <= 2) {
+                return false;
+            }
+        } else {
+            int amount = AbilityUtils.calculateAmount(host, sa.getParam("NumCards"), sa);
+            // damage cost with prevention?
+            if (cost.hasSpecificCostType(CostDamage.class)) {
+                if (!payer.canLoseLife()) {
+                    return false;
+                }
+                final CostDamage pay = cost.getCostPartByType(CostDamage.class);
+                int realDamage = ComputerUtilCombat.predictDamageTo(payer, pay.getAbilityAmount(sa), host, false);
+                if (realDamage > payer.getLife()) {
+                    return false;
+                }
+                if (realDamage > amount * 2) { // two life points per not discarded card?
+                    return false;
+                }
+            }
+
+            boolean isDrawDiscard = cost.hasOnlySpecificCostType(CostDraw.class) && sa.hasParam("UnlessSwitched");
+            // TODO should AI do draw + discard effects when hand is empty?
+            // maybe if deck supports Graveyard or discard effects?
+            if (hand.isEmpty()) {
+                return false;
+            }
+            // is it always better?
+            if (isDrawDiscard) {
+                // check to not deck yourself
+                int libSize = payer.getCardsIn(ZoneType.Library).size();
+                if (amount >= libSize - 3) {
+                    if (payer.isCardInPlay("Laboratory Maniac") && !payer.cantWin()) {
+                        return true;
+                    }
+                    // Don't deck yourself
+                    return false;
+                }
+                return true;
+            }
+        }
+
+        return super.willPayUnlessCost(payer, sa, cost, alreadyPaid, payers);
     }
 }

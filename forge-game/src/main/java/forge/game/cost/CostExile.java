@@ -123,7 +123,8 @@ public class CostExile extends CostPartWithList {
                     return String.format("Exile %s from your %s", this.getType(), origin);
                 }
                 return String.format("Exile %s", this.getType());
-            } else if (this.getType().equals("All")) {
+            }
+            if (this.getType().equals("All")) {
                 return String.format("Exile all cards from your %s", origin);
             }
 
@@ -163,9 +164,9 @@ public class CostExile extends CostPartWithList {
 
             return String.format("Exile %s from your %s",
                     Cost.convertAmountTypeToWords(i, this.getAmount(), desc), origin);
-        } else {
-            return exileMultiZoneCostString(false, chosenX);
         }
+
+        return exileMultiZoneCostString(false, chosenX);
     }
 
     @Override
@@ -186,6 +187,9 @@ public class CostExile extends CostPartWithList {
 
         if (this.payCostFromSource()) {
             return list.contains(source);
+        }
+        if (getType().equals("OriginalHost")) {
+            return list.contains(ability.getOriginalHost());
         }
 
         boolean totalCMC = false;
@@ -219,11 +223,19 @@ public class CostExile extends CostPartWithList {
             list = CardLists.getValidCards(list, type.split(";"), payer, source, ability);
         }
 
-        int amount = this.getAbilityAmount(ability);
-
-        if (nTypes > -1) {
-            if (CardFactoryUtil.getCardTypesFromList(list) < nTypes) return false;
+        if (nTypes > -1 && AbilityUtils.countCardTypesFromList(list, false) < nTypes) {
+            return false;
         }
+
+        if (totalCMC || totalCMCgreater) {
+            if (totalM.equals("X") && ability.getXManaCostPaid() == null) { // X hasn't yet been decided, let it pass
+                return true;
+            }
+            int i = AbilityUtils.calculateAmount(source, totalM, ability);
+            return totalCMCgreater ? CardLists.getTotalCMC(list) >= i : CardLists.cmcCanSumTo(i, list);
+        }
+
+        int amount = this.getAbilityAmount(ability);
         
         if (sharedType) { // will need more logic if cost ever wants more than 2 that share a type
             if (list.size() < amount) return false;
@@ -236,14 +248,6 @@ public class CostExile extends CostPartWithList {
                 }
             }
             return false;
-        }
-
-        if (totalCMC || totalCMCgreater) {
-            if (totalM.equals("X") && ability.getXManaCostPaid() == null) { // X hasn't yet been decided, let it pass
-                return true;
-            }
-            int i = AbilityUtils.calculateAmount(source, totalM, ability);
-            return totalCMCgreater ? CardLists.getTotalCMC(list) >= i : CardLists.cmcCanSumTo(i, list);
         }
 
         // for Craft: do not count the source card twice (it will be sacrificed)

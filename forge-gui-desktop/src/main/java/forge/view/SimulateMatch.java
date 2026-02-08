@@ -1,12 +1,7 @@
 package forge.view;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -135,6 +130,10 @@ public class SimulateMatch {
             }
         }
 
+        if (params.containsKey("c")) {
+            rules.setSimTimeout(Integer.parseInt(params.get("c").get(0)));
+        }
+
         sb.append(" - ").append(Lang.nounWithNumeral(nGames, "game")).append(" of ").append(type);
 
         System.out.println(sb.toString());
@@ -168,6 +167,7 @@ public class SimulateMatch {
         System.out.println("\tT - Type of tournament to run with all provided decks (Bracket, RoundRobin, Swiss)");
         System.out.println("\tP - Amount of players per match (used only with Tournaments, defaults to 2)");
         System.out.println("\tF - format of games, defaults to constructed");
+        System.out.println("\tc - Clock flag. Set the maximum time in seconds before calling the match a draw, defaults to 120.");
         System.out.println("\tq - Quiet flag. Output just the game result, not the entire game log.");
     }
 
@@ -181,7 +181,7 @@ public class SimulateMatch {
             TimeLimitedCodeBlock.runWithTimeout(() -> {
                 mc.startGame(g1);
                 sw.stop();
-            }, 120, TimeUnit.SECONDS);
+            }, mc.getRules().getSimTimeout(), TimeUnit.SECONDS);
         } catch (TimeoutException e) {
             System.out.println("Stopping slow match as draw");
         } catch (Exception | StackOverflowError e) {
@@ -254,7 +254,6 @@ public class SimulateMatch {
                     numPlayers++;
                 }
             }
-
         }
 
         if (numPlayers == 0) {

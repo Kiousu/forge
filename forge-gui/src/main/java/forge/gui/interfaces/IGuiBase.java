@@ -1,13 +1,5 @@
 package forge.gui.interfaces;
 
-import java.io.File;
-import java.io.IOException;
-import java.net.URISyntaxException;
-import java.util.Collection;
-import java.util.List;
-
-import com.google.common.base.Function;
-
 import forge.gamemodes.match.HostedMatch;
 import forge.gui.download.GuiDownloadService;
 import forge.item.PaperCard;
@@ -15,8 +7,17 @@ import forge.localinstance.skin.FSkinProp;
 import forge.localinstance.skin.ISkinImage;
 import forge.sound.IAudioClip;
 import forge.sound.IAudioMusic;
-import forge.util.Callback;
+import forge.util.FSerializableFunction;
 import forge.util.ImageFetcher;
+
+import java.io.File;
+import java.io.IOException;
+import java.net.URISyntaxException;
+import java.util.Collection;
+import java.util.List;
+import java.util.function.Consumer;
+
+import org.jupnp.UpnpServiceConfiguration;
 
 public interface IGuiBase {
     boolean isRunningOnDesktop();
@@ -37,11 +38,11 @@ public interface IGuiBase {
     void showImageDialog(ISkinImage image, String message, String title);
     int showOptionDialog(String message, String title, FSkinProp icon, List<String> options, int defaultOption);
     String showInputDialog(String message, String title, FSkinProp icon, String initialInput, List<String> inputOptions, boolean isNumeric);
-    <T> List<T> getChoices(String message, int min, int max, Collection<T> choices, T selected, Function<T, String> display);
+    <T> List<T> getChoices(String message, int min, int max, Collection<T> choices, Collection<T> selected, FSerializableFunction<T, String> display);
     <T> List<T> order(String title, String top, int remainingObjectsMin, int remainingObjectsMax, List<T> sourceChoices, List<T> destChoices);
     String showFileDialog(String title, String defaultDir);
     File getSaveFile(File defaultFile);
-    void download(GuiDownloadService service, Callback<Boolean> callback);
+    void download(GuiDownloadService service, Consumer<Boolean> callback);
     void refreshSkin();
     void showCardList(String title, String message, List<PaperCard> list);
     boolean showBoxedProduct(String title, String message, List<PaperCard> list);
@@ -50,6 +51,7 @@ public interface IGuiBase {
     int getSleevesCount();
     void copyToClipboard(String text);
     void browseToUrl(String url) throws IOException, URISyntaxException;
+    boolean isSupportedAudioFormat(File file);
     IAudioClip createAudioClip(String filename);
     IAudioMusic createAudioMusic(String filename);
     void startAltSoundSystem(String filename, boolean isSynchronized);
@@ -62,4 +64,5 @@ public interface IGuiBase {
     String encodeSymbols(String str, boolean formatReminderText);
     void preventSystemSleep(boolean preventSleep);
     float getScreenScale();
+    UpnpServiceConfiguration getUpnpPlatformService();
 }

@@ -13,8 +13,6 @@ import javax.swing.WindowConstants;
 
 import org.apache.commons.lang3.StringUtils;
 
-import com.google.common.base.Function;
-
 import forge.card.CardStateName;
 import forge.card.ICardFace;
 import forge.game.card.Card;
@@ -26,6 +24,8 @@ import forge.item.PaperCard;
 import forge.model.FModel;
 import forge.screens.match.CMatchUI;
 import forge.toolbox.FOptionPane;
+import forge.util.FSerializableFunction;
+import forge.util.IHasName;
 import forge.util.Localizer;
 import forge.view.arcane.ListCardArea;
 
@@ -135,10 +135,10 @@ public class GuiChoose {
         return getChoices(message, min, max, choices, null, null);
     }
 
-    public static <T> List<T> getChoices(final String message, final int min, final int max, final Collection<T> choices, final T selected, final Function<T, String> display) {
+    public static <T> List<T> getChoices(final String message, final int min, final int max, final Collection<T> choices, final Collection<T> selected, final FSerializableFunction<T, String> display) {
         return getChoices(message, min, max, choices, selected, display, null);
     }
-    public static <T> List<T> getChoices(final String message, final int min, final int max, final Collection<T> choices, final T selected, final Function<T, String> display, final CMatchUI matchUI) {
+    public static <T> List<T> getChoices(final String message, final int min, final int max, final Collection<T> choices, final Collection<T> selected, final FSerializableFunction<T, String> display, final CMatchUI matchUI) {
         if (choices == null || choices.isEmpty()) {
             if (min == 0) {
                 return new ArrayList<>();
@@ -156,12 +156,7 @@ public class GuiChoose {
                         matchUI.setCard((InventoryItem) list.getSelectedValue());
                         return;
                     } else if (sel instanceof ICardFace || sel instanceof CardFaceView) {
-                        String faceName;
-                        if (sel instanceof ICardFace) {
-                            faceName = ((ICardFace) sel).getName();
-                        } else {
-                            faceName = ((CardFaceView) sel).getOracleName();
-                        }
+                        String faceName = ((IHasName)sel).getName();
                         PaperCard paper = FModel.getMagicDb().getCommonCards().getUniqueByName(faceName);
                         if (paper == null) {
                             paper = FModel.getMagicDb().getVariantCards().getUniqueByName(faceName);

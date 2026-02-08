@@ -298,21 +298,11 @@ ScryfallCode=LTR
 284 R Ringwraiths @Warren Mahy
 285 R Assault on Osgiliath @Warren Mahy
 286 R Elanor Gardner @Torgeir Fjereide
-383 R Saradoc, Master of Buckland @Sean Vo
-384 R Elvish Mariner @Axel Sauerwald
-385 R Ringwraiths @Warren Mahy
-386 R Assault on Osgiliath @Warren Mahy
-387 R Elanor Gardner @Torgeir Fjereide
 824 R Eagle of Deliverance @Sidharth Chaturvedi
 825 R Minas Tirith Garrison @Irina Nordsol
 826 R Warg Rider @Pascal Quidault
 827 R Riders of the Mark @Antonio José Manzanedo
 828 R Mirkwood Channeler @Irina Nordsol
-829 R Eagle of Deliverance @Sidharth Chaturvedi
-830 R Minas Tirith Garrison @Irina Nordsol
-831 R Warg Rider @Pascal Quidault
-832 R Riders of the Mark @Antonio José Manzanedo
-833 R Mirkwood Channeler @Irina Nordsol
 
 [bundle]
 287 M Aragorn and Arwen, Wed @Magali Villeneuve
@@ -805,6 +795,11 @@ ScryfallCode=LTR
 380 M The One Ring @Veli Nyström
 381 M Palantír of Orthanc @Tatiana Veryayskaya
 382 R Phial of Galadriel @Andrea Piparo
+383 R Saradoc, Master of Buckland @Sean Vo
+384 R Elvish Mariner @Axel Sauerwald
+385 R Ringwraiths @Warren Mahy
+386 R Assault on Osgiliath @Warren Mahy
+387 R Elanor Gardner @Torgeir Fjereide
 388 R Frodo, Determined Hero @Magali Villeneuve
 389 R Gandalf, White Rider @Ekaterina Burmak
 390 R Gollum, Scheming Guide @Dmitry Burmak
@@ -852,9 +847,14 @@ ScryfallCode=LTR
 791 M The One Ring @Veli Nyström
 792 M Palantír of Orthanc @Tatiana Veryayskaya
 793 R Phial of Galadriel @Andrea Piparo
+829 R Eagle of Deliverance @Sidharth Chaturvedi
+830 R Minas Tirith Garrison @Irina Nordsol
+831 R Warg Rider @Pascal Quidault
+832 R Riders of the Mark @Antonio José Manzanedo
+833 R Mirkwood Channeler @Irina Nordsol
 
 [buy a box]
-398 R Trailblazer's Boots @Alexander Gering
+398 R Trailblazer's Boots @Alexander Gering ${"flavorName": "Lórien Brooch"}
 
 [promo]
 299 M Gandalf the White @Leonardo Borazio
@@ -862,19 +862,22 @@ ScryfallCode=LTR
 301 M Sauron, the Dark Lord @Anton Solovianchyk
 
 [rebalanced]
-A103 R A-Orcish Bowmasters @Maxim Kostin
-A246 M A-The One Ring @Veli Nyström
+A-103 R A-Orcish Bowmasters @Maxim Kostin
+A-246 M A-The One Ring @Veli Nyström
 
 [tokens]
-b_0_0_orc_army
-b_0_0_orc_army
-ballistic_boulder
-c_a_food_sac
-c_a_food_sac
-c_a_food_sac
-c_a_treasure_sac
-smaug
-u_1_1_tentacle
-w_1_1_human_soldier
-w_1_1_human_soldier
-w_1_1_spirit_flying
+1 w_1_1_human_soldier @Anastasia Balakchina
+2 w_1_1_human_soldier @Axel Sauerwald
+3 w_1_1_spirit_flying @Nino Is
+4 u_1_1_tentacle @Chris Cold
+5 b_0_0_orc_army @Veli Nyström
+6 b_0_0_orc_army @Veli Nyström
+7 smaug @Jarel Threat
+8 ballistic_boulder @Alexander Forssberg
+9 c_a_food_sac @Randy Gallegos
+10 c_a_food_sac @Claudiu-Antoniu Magherusan
+11 c_a_food_sac @L J Koh
+12 c_a_treasure_sac @Valera Lutfullina
+
+[other]
+13 the_ring @Viko Menezes

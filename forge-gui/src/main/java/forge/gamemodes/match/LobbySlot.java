@@ -1,13 +1,12 @@
 package forge.gamemodes.match;
 
-import java.io.Serializable;
-import java.util.Set;
-
 import com.google.common.collect.ImmutableSet;
-
 import forge.ai.AIOption;
 import forge.deck.Deck;
 import forge.gamemodes.net.event.UpdateLobbyPlayerEvent;
+
+import java.io.Serializable;
+import java.util.Set;
 
 public final class LobbySlot implements Serializable {
     private static final long serialVersionUID = 9203252798721142264L;
@@ -26,6 +25,7 @@ public final class LobbySlot implements Serializable {
     private String SchemeDeckName;
     private String PlanarDeckName;
     private String DeckName;
+    private String aiProfile;
 
     public LobbySlot(final LobbySlotType type, final String name, final int avatarIndex, final int sleeveIndex, final int team, final boolean isArchenemy, final boolean isReady, final Set<AIOption> aiOptions) {
         this.type = type;
@@ -98,6 +98,9 @@ public final class LobbySlot implements Serializable {
         if (data.getDeckName() != null) {
             setDeckName(data.getDeckName());
             changed = true;
+        }
+        if (data.getAiProfile() != null) {
+            setAiProfile(data.getAiProfile());
         }
         return changed;
     }
@@ -182,4 +185,11 @@ public final class LobbySlot implements Serializable {
         this.aiOptions = aiOptions == null ? ImmutableSet.of() : ImmutableSet.copyOf(aiOptions);
     }
 
+    public String getAiProfile() {
+        return aiProfile;
+    }
+
+    public void setAiProfile(String aiProfile) {
+        this.aiProfile = aiProfile;
+    }
 }

@@ -225,6 +225,7 @@ public class SaveLoadScene extends UIScene {
                 break;
             case Load:
                 try {
+                    MapViewScene.instance().clearBookMarks();
                     Forge.setTransitionScreen(new TransitionScreen(() -> {
                         loaded = false;
                         if (WorldSave.load(currentSlot)) {
@@ -252,7 +253,9 @@ public class SaveLoadScene extends UIScene {
                                 Current.player().getQuests().clear();
                                 Current.player().resetQuestFlags();
                                 Current.player().setCharacterFlag("newGamePlus", 1);
-                                AdventurePlayer.current().addQuest("28");
+                                Current.player().removeAllQuestItems();
+                                AdventurePlayer.current().addQuest("28", true);
+                                WorldSave.getCurrentSave().clearBookmarks();
                                 WorldStage.getInstance().enterSpawnPOI();
                                 SoundSystem.instance.changeBackgroundTrack();
                                 Forge.switchScene(GameScene.instance());
@@ -324,8 +327,8 @@ public class SaveLoadScene extends UIScene {
         String noMapData = "[RED]No Map Data!";
         if (worldSaveHeader.name.contains(Character.toString(ASCII_179))) {
             String[] split = TextUtil.split(worldSaveHeader.name, ASCII_179);
-            if (getLocation)
-                return split.length > 1 ? split[1] : noMapData;
+            if (getLocation) // unicode symbols with \\uFFxx blackout the stage using TextraTypist 2.x.x
+                return split.length > 1 ? split[1].replaceAll("\uFF0A", "• ") : noMapData;
             else
                 return split[0];
         }
@@ -384,19 +387,19 @@ public class SaveLoadScene extends UIScene {
         switch (AdventurePlayer.current().getDifficulty().name) {
             case "easy":
             case "Easy":
-                difficulty = "[%99][CYAN]\uFF0A[WHITE]";
+                difficulty = "[%99][CYAN]• [WHITE]";
                 break;
             case "normal":
             case "Normal":
-                difficulty = "[%99][GREEN]\uFF0A[WHITE]";
+                difficulty = "[%99][GREEN]• [WHITE]";
                 break;
             case "hard":
             case "Hard":
-                difficulty = "[%99][GOLD]\uFF0A[WHITE]";
+                difficulty = "[%99][GOLD]• [WHITE]";
                 break;
             case "insane":
             case "Insane":
-                difficulty = "[%99][RED]\uFF0A[WHITE]";
+                difficulty = "[%99][RED]• [WHITE]";
                 break;
             default:
                 difficulty = "[%99][WHITE]";

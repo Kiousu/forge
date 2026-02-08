@@ -1,9 +1,9 @@
 package forge.game.mana;
 
-import com.google.common.collect.Lists;
 import forge.game.event.EventValueChangeType;
 import forge.game.event.GameEventZone;
 import forge.game.player.Player;
+import forge.game.player.PlayerCollection;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 
@@ -13,25 +13,19 @@ import java.util.List;
 public class ManaRefundService {
 
     private final SpellAbility sa;
-    private final Player activator;
+
     public ManaRefundService(SpellAbility sa) {
         this.sa = sa;
-        this.activator = sa.getActivatingPlayer();
     }
 
     public void refundManaPaid() {
-        List<Player> payers = Lists.newArrayList();
+        PlayerCollection payers = new PlayerCollection(sa.getActivatingPlayer());
 
         // move non-undoable paying mana back to floating
         for (Mana mana : sa.getPayingMana()) {
-            Player pl = mana.getManaAbility().getSourceSA() ==  null // null means mana likely added by dev cheat
-                ? mana.getManaAbility().getSourceCard().getOwner()
-                : mana.getManaAbility().getSourceSA().getActivatingPlayer();
-
+            Player pl = mana.getPlayer();
             pl.getManaPool().addMana(mana);
-            if (!payers.contains(pl)) {
-                payers.add(pl);
-            }
+            payers.add(pl);
         }
 
         sa.getPayingMana().clear();
@@ -50,7 +44,7 @@ public class ManaRefundService {
             // Recursively refund abilities that were used.
             ManaRefundService refundService = new ManaRefundService(am);
             refundService.refundManaPaid();
-            activator.getGame().getStack().clearUndoStack(am);
+            sa.getHostCard().getGame().getStack().clearUndoStack(am);
         }
 
         payingAbilities.clear();

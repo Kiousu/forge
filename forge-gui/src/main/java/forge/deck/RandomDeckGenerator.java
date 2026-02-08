@@ -1,16 +1,17 @@
 package forge.deck;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import com.google.common.collect.Iterables;
-
 import forge.game.GameFormat;
 import forge.game.GameType;
 import forge.game.IHasGameType;
 import forge.gamemodes.quest.QuestController;
+import forge.localinstance.properties.ForgePreferences;
 import forge.model.FModel;
 import forge.util.Aggregates;
+import forge.util.IterableUtil;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class RandomDeckGenerator extends DeckProxy implements Comparable<RandomDeckGenerator> {
     private enum RandomDeckType {
@@ -178,9 +179,11 @@ public class RandomDeckGenerator extends DeckProxy implements Comparable<RandomD
         if (Iterables.isEmpty(decks)) {
             return getGeneratedDeck(); //fall back to generated deck if no decks in filtered list
         }
-        Iterable<DeckProxy> AIDecks = Iterables.filter(decks, deckProxy -> deckProxy.getAI().inMainDeck == 0);
-        if (isAi && Iterables.size(AIDecks) > 10)
-            return Aggregates.random(AIDecks).getDeck();
+        if (isAi && FModel.getPreferences().getPrefBoolean(ForgePreferences.FPref.UI_AUTO_AIDECK_SELECTION)) {
+            Iterable<DeckProxy> AIDecks = IterableUtil.filter(decks, deckProxy -> deckProxy.getAI().inMainDeck == 0);
+            if (Iterables.size(AIDecks) > 10)
+                return Aggregates.random(AIDecks).getDeck();
+        }
         return Aggregates.random(decks).getDeck();
     }
 
@@ -207,7 +210,7 @@ public class RandomDeckGenerator extends DeckProxy implements Comparable<RandomD
                 decks = DeckProxy.getAllConstructedDecks();
                 break;
         }
-        decks = Iterables.filter(decks, DeckProxy::isFavoriteDeck);
+        decks = IterableUtil.filter(decks, DeckProxy::isFavoriteDeck);
         if (Iterables.isEmpty(decks)) {
             return getGeneratedDeck(); //fall back to generated deck if no favorite decks
         }

@@ -34,6 +34,7 @@ import forge.gamemodes.match.LobbySlotType;
 import forge.gamemodes.net.event.UpdateLobbyPlayerEvent;
 import forge.gui.CardDetailPanel;
 import forge.gui.GuiBase;
+import forge.gui.SwingPrefBinders;
 import forge.gui.interfaces.ILobbyView;
 import forge.gui.util.SOptionPane;
 import forge.interfaces.IPlayerChangeListener;
@@ -51,10 +52,7 @@ import forge.toolbox.FScrollPanel;
 import forge.toolbox.FSkin;
 import forge.toolbox.FSkin.SkinImage;
 import forge.toolbox.FTextField;
-import forge.util.Aggregates;
-import forge.util.Lang;
-import forge.util.Localizer;
-import forge.util.NameGenerator;
+import forge.util.*;
 import net.miginfocom.swing.MigLayout;
 
 /**
@@ -77,7 +75,9 @@ public class VLobby implements ILobbyView {
 
     private final StartButton btnStart  = new StartButton();
     private final JPanel pnlStart = new JPanel(new MigLayout("insets 0, gap 0, wrap 2"));
-    private final JComboBox gamesInMatch = new JComboBox(new String[] {"1","3","5"});
+    private final JComboBox<String> gamesInMatch = new JComboBox<String>(new String[] {"1","3","5"});
+    private final SwingPrefBinders.ComboBox gamesInMatchBinder =
+      new SwingPrefBinders.ComboBox(FPref.UI_MATCHES_PER_GAME, gamesInMatch);
     private final JPanel gamesInMatchFrame = new JPanel(new MigLayout("insets 0, gap 0, wrap 2"));
     private final JPanel constructedFrame = new JPanel(new MigLayout("insets 0, gap 0, wrap 2")); // Main content frame
 
@@ -186,17 +186,19 @@ public class VLobby implements ILobbyView {
             btnStart.addActionListener(arg0 -> {
                 Runnable startGame = lobby.startGame();
                 if (startGame != null) {
-                    if (!gamesInMatch.getSelectedItem().equals(FPref.UI_MATCHES_PER_GAME)) {
-                        FModel.getPreferences().setPref(FPref.UI_MATCHES_PER_GAME, (String) gamesInMatch.getSelectedItem());
-                    }
                     startGame.run();
                 }
             });
         }
+        String defaultGamesInMatch = FModel.getPreferences().getPref(FPref.UI_MATCHES_PER_GAME);
+        if (defaultGamesInMatch == null || defaultGamesInMatch.isEmpty()) {
+            defaultGamesInMatch = "3";
+        }
+
         gamesInMatchFrame.add(newLabel(localizer.getMessage("lblGamesInMatch")), "w 150px!, h 30px!");
         gamesInMatchFrame.add(gamesInMatch, "w 50px!, h 30px!");
         gamesInMatchFrame.setOpaque(false);
-        gamesInMatch.setSelectedItem("3");
+
         pnlStart.add(gamesInMatchFrame);
     }
 
@@ -292,6 +294,7 @@ public class VLobby implements ILobbyView {
                 panel.setMayEdit(lobby.mayEdit(i));
                 panel.setMayControl(lobby.mayControl(i));
                 panel.setMayRemove(lobby.mayRemove(i));
+                panel.setAiProfile(slot.getAiProfile());
                 panel.update();
 
                 final boolean isSlotAI = slot.getType() == LobbySlotType.AI;
@@ -382,7 +385,14 @@ public class VLobby implements ILobbyView {
 
     private UpdateLobbyPlayerEvent getSlot(final int index) {
         final PlayerPanel panel = getPlayerPanel(index);
-        return UpdateLobbyPlayerEvent.create(panel.getType(), panel.getPlayerName(), panel.getAvatarIndex(), -1/*TODO panel.getSleeveIndex()*/, panel.getTeam(), panel.isArchenemy(), panel.isReady(), panel.isDevMode(), panel.getAiOptions());
+        return UpdateLobbyPlayerEvent.create(panel.getType(),
+                panel.getPlayerName(),
+                panel.getAvatarIndex(), -1 /*TODO panel.getSleeveIndex()*/,
+                panel.getTeam(), panel.isArchenemy(),
+                panel.isReady(),
+                panel.isDevMode(),
+                panel.getAiOptions(),
+                panel.getAiProfile());
     }
 
     /** Builds the actual deck panel layouts for each player.
@@ -523,7 +533,7 @@ public class VLobby implements ILobbyView {
         PaperCard vanguardAvatar = null;
         final Deck deck = decks[playerIndex];
         if (selected instanceof PaperCard) {
-            pp.setVanguardButtonText(((PaperCard) selected).getName());
+            pp.setVanguardButtonText(((PaperCard) selected).getDisplayName());
             cdp.setCard(CardView.getCardForUi((PaperCard) selected));
             cdp.setVisible(true);
             refreshPanels(false, true);
@@ -608,7 +618,7 @@ public class VLobby implements ILobbyView {
     public JPanel getConstructedFrame() { return constructedFrame; }
     public JPanel getPanelStart() { return pnlStart; }
     public List<FDeckChooser> getDeckChoosers() {
-        List<FDeckChooser> choosers = new ArrayList<>(playerPanels.size());
+        List<FDeckChooser> choosers = Lists.newArrayList();
         for (final PlayerPanel playerPanel : playerPanels) {
             choosers.add(playerPanel.getDeckChooser());
         }
@@ -863,6 +873,11 @@ public class VLobby implements ILobbyView {
     /** Return the Vanguard avatars not flagged RemoveDeck:All or RemoveDeck:Random. */
     public List<PaperCard> getNonRandomAiAvatars() {
         return nonRandomAiAvatars;
+    }
+
+    /** Return the gamesInMatchBinder */
+    public SwingPrefBinders.ComboBox getGamesInMatchBinder() {
+      return gamesInMatchBinder;
     }
 
     /** Populate vanguard lists. */

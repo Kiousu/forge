@@ -16,7 +16,6 @@ import forge.game.player.Player;
 import forge.game.player.PlayerController;
 import forge.game.player.PlayerController.BinaryChoiceType;
 import forge.game.spellability.SpellAbility;
-import forge.util.CardTranslation;
 import forge.util.Expressions;
 import forge.util.Lang;
 import forge.util.Localizer;
@@ -65,8 +64,7 @@ public class CountersPutOrRemoveEffect extends SpellAbilityEffect {
             ctype = CounterType.getType(sa.getParam("CounterType"));
         }
 
-        final Player pl = !sa.hasParam("DefinedPlayer") ? sa.getActivatingPlayer() :
-                AbilityUtils.getDefinedPlayers(source, sa.getParam("DefinedPlayer"), sa).getFirst();
+        final Player pl = AbilityUtils.getDefinedPlayers(source, sa.getParam("DefinedPlayer"), sa).getFirst();
         final boolean eachExisting = sa.hasParam("EachExistingCounter");
 
         GameEntityCounterTable table = new GameEntityCounterTable();
@@ -79,9 +77,9 @@ public class CountersPutOrRemoveEffect extends SpellAbilityEffect {
             if (gameCard == null || !tgtCard.equalsWithGameTimestamp(gameCard)) {
                 continue;
             }
-            if (!eachExisting && sa.hasParam("Optional") && !pl.getController().confirmAction(sa, null,
+            if (sa.hasParam("Optional") && !pl.getController().confirmAction(sa, null,
                     Localizer.getInstance().getMessage("lblWouldYouLikePutRemoveCounters", ctype.getName(),
-                            CardTranslation.getTranslatedName(gameCard.getName())), null)) {
+                            gameCard.getTranslatedName()), null)) {
                 continue;
             }
             if (gameCard.hasCounters()) {
@@ -114,8 +112,6 @@ public class CountersPutOrRemoveEffect extends SpellAbilityEffect {
         String prompt = Localizer.getInstance().getMessage("lblSelectCounterTypeToAddOrRemove");
         CounterType chosenType = pc.chooseCounterType(list, sa, prompt, params);
 
-        params.put("CounterType", chosenType);
-        prompt = Localizer.getInstance().getMessage("lblWhatToDoWithTargetCounter",  chosenType.getName(), CardTranslation.getTranslatedName(tgtCard.getName())) + " ";
         boolean putCounter;
         if (sa.hasParam("RemoveConditionSVar")) {
             final Card host = sa.getHostCard();
@@ -137,6 +133,8 @@ public class CountersPutOrRemoveEffect extends SpellAbilityEffect {
             } else if (!canReceive && canRemove) {
                 putCounter = false;
             } else {
+                params.put("CounterType", chosenType);
+                prompt = Localizer.getInstance().getMessage("lblWhatToDoWithTargetCounter", chosenType.getName(), tgtCard.getTranslatedName()) + " ";
                 putCounter = pc.chooseBinary(sa, prompt, BinaryChoiceType.AddOrRemove, params);
             }
         }

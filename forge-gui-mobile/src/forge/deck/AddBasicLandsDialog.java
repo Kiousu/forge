@@ -21,9 +21,9 @@ import java.text.NumberFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.function.Consumer;
 
 import com.badlogic.gdx.utils.Align;
-import com.google.common.collect.Iterables;
 
 import forge.Forge;
 import forge.Graphics;
@@ -47,9 +47,7 @@ import forge.toolbox.FLabel;
 import forge.toolbox.FOptionPane;
 import forge.toolbox.FScrollPane;
 import forge.toolbox.FTextArea;
-import forge.util.Callback;
-import forge.util.MyRandom;
-import forge.util.Utils;
+import forge.util.*;
 
 
 public class AddBasicLandsDialog extends FDialog {
@@ -58,10 +56,10 @@ public class AddBasicLandsDialog extends FDialog {
 
     private final Deck currentDeck;
 
-    private final Callback<CardPool> callback;
+    private final Consumer<CardPool> callback;
 
     private final FLabel lblLandSet = add(new FLabel.Builder().text(Forge.getLocalizer().getMessage("lblLandSet") + ":").font(FSkinFont.get(12)).textColor(FLabel.getInlineLabelColor()).build());
-    private final FComboBox<CardEdition> cbLandSet = add(new FComboBox<>(Iterables.filter(StaticData.instance().getEditions(), CardEdition.Predicates.hasBasicLands)));
+    private final FComboBox<CardEdition> cbLandSet = add(new FComboBox<>(IterableUtil.filter(StaticData.instance().getSortedEditions(), CardEdition::hasBasicLands)));
 
     private final FScrollPane scroller = add(new FScrollPane() {
         @Override
@@ -116,7 +114,7 @@ public class AddBasicLandsDialog extends FDialog {
     private int nonLandCount, oldLandCount;
     private CardEdition landSet;
 
-    public AddBasicLandsDialog(Deck deck, CardEdition defaultLandSet, final Callback<CardPool> callback0, List<CardEdition> editionOptions) {
+    public AddBasicLandsDialog(Deck deck, CardEdition defaultLandSet, final Consumer<CardPool> callback0, List<CardEdition> editionOptions) {
         super(Forge.getLocalizer().getMessage("lblAddBasicLandsAutoSuggest").replace("%s", deck.getName()), 2);
 
         callback = callback0;
@@ -128,20 +126,18 @@ public class AddBasicLandsDialog extends FDialog {
         cbLandSet.setFont(lblLandSet.getFont());
         cbLandSet.setAutoClose(false);
         cbLandSet.setChangedHandler(e -> {
-            landSet = cbLandSet.getSelectedItem();
-            pnlPlains.refreshArtChoices();
-            pnlIsland.refreshArtChoices();
-            pnlSwamp.refreshArtChoices();
-            pnlMountain.refreshArtChoices();
-            pnlForest.refreshArtChoices();
+            onEditionChange();
         });
 
-        if (editionOptions != null && !editionOptions.isEmpty())
-        {
+        if (editionOptions != null && !editionOptions.isEmpty()) {
             cbLandSet.setItems(editionOptions, editionOptions.get(0));
         }
 
-        cbLandSet.setSelectedItem(defaultLandSet);
+        if (cbLandSet.getSelectedItem() == defaultLandSet) {
+            onEditionChange();
+        } else {
+            cbLandSet.setSelectedItem(defaultLandSet);
+        }
 
         initButton(0, Forge.getLocalizer().getMessage("lblOK"), e -> {
             CardPool landsToAdd = new CardPool();
@@ -154,7 +150,7 @@ public class AddBasicLandsDialog extends FDialog {
             hide();
 
             if (landsToAdd.countAll() > 0) {
-                callback.run(landsToAdd);
+                callback.accept(landsToAdd);
             }
         });
         initButton(1, Forge.getLocalizer().getMessage("lblCancel"), e -> hide());
@@ -233,6 +229,15 @@ public class AddBasicLandsDialog extends FDialog {
         }
 
         updateDeckInfoLabel();
+    }
+
+    private void onEditionChange() {
+        landSet = cbLandSet.getSelectedItem();
+        pnlPlains.refreshArtChoices();
+        pnlIsland.refreshArtChoices();
+        pnlSwamp.refreshArtChoices();
+        pnlMountain.refreshArtChoices();
+        pnlForest.refreshArtChoices();
     }
 
     @Override

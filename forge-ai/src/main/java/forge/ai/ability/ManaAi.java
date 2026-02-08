@@ -1,11 +1,5 @@
 package forge.ai.ability;
 
-import java.util.Arrays;
-import java.util.List;
-
-import com.google.common.base.Predicates;
-import com.google.common.collect.Iterables;
-
 import forge.ai.*;
 import forge.card.ColorSet;
 import forge.card.MagicColor;
@@ -13,12 +7,7 @@ import forge.card.mana.ManaAtom;
 import forge.card.mana.ManaCost;
 import forge.game.CardTraitPredicates;
 import forge.game.ability.AbilityUtils;
-import forge.game.card.Card;
-import forge.game.card.CardCollection;
-import forge.game.card.CardLists;
-import forge.game.card.CardPredicates;
-import forge.game.card.CounterEnumType;
-import forge.game.card.CounterType;
+import forge.game.card.*;
 import forge.game.cost.CostPart;
 import forge.game.cost.CostRemoveCounter;
 import forge.game.keyword.Keyword;
@@ -32,6 +21,10 @@ import forge.game.player.PlayerPredicates;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import forge.util.Aggregates;
+import forge.util.IterableUtil;
+
+import java.util.Arrays;
+import java.util.List;
 
 public class ManaAi extends SpellAbilityAi {
 
@@ -81,8 +74,10 @@ public class ManaAi extends SpellAbilityAi {
     protected boolean checkPhaseRestrictions(Player ai, SpellAbility sa, PhaseHandler ph, String logic) {
         if (logic.startsWith("ManaRitual")) {
              return ph.is(PhaseType.MAIN2, ai) || ph.is(PhaseType.MAIN1, ai);
-        } else if ("AtOppEOT".equals(logic)) {
-            return (!ai.getManaPool().hasBurn() || !ai.canLoseLife() || ai.cantLoseForZeroOrLessLife()) && ph.is(PhaseType.END_OF_TURN) && ph.getNextTurn() == ai;
+        }
+        if ("AtOppEOT".equals(logic)) {
+            return ph.is(PhaseType.END_OF_TURN) && ph.getNextTurn() == ai
+                    && (!ai.getManaPool().hasBurn() || !ai.canLoseLife() || ai.cantLoseForZeroOrLessLife());
         }
         return super.checkPhaseRestrictions(ai, sa, ph, logic);
     }
@@ -94,18 +89,22 @@ public class ManaAi extends SpellAbilityAi {
      * forge.game.spellability.SpellAbility)
      */
     @Override
-    protected boolean checkApiLogic(Player ai, SpellAbility sa) {
+    protected AiAbilityDecision checkApiLogic(Player ai, SpellAbility sa) {
         if (sa.hasParam("AILogic")) {
-            return true; // handled elsewhere, does not meet the standard requirements
+            return new AiAbilityDecision(100, AiPlayDecision.WillPlay); // handled elsewhere, does not meet the standard requirements
         }
 
         // TODO check if it would be worth it to keep mana open for opponents turn anyway
         if (ComputerUtil.activateForCost(sa, ai)) {
-            return true;
+            return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
         }
 
-        return sa.getPayCosts().hasNoManaCost() && sa.getPayCosts().isReusuableResource()
-                && sa.getSubAbility() == null && (improvesPosition(ai, sa) || ComputerUtil.playImmediately(ai, sa));
+        if (sa.getPayCosts().hasNoManaCost() && sa.getPayCosts().isReusuableResource()
+                && sa.getSubAbility() == null && (improvesPosition(ai, sa) || ComputerUtil.playImmediately(ai, sa))) {
+            return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
+        }
+
+        return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
     }
 
     /**
@@ -119,13 +118,14 @@ public class ManaAi extends SpellAbilityAi {
      * @return a boolean.
      */
     @Override
-    protected boolean doTriggerAINoCost(Player aiPlayer, SpellAbility sa, boolean mandatory) {
+    protected AiAbilityDecision doTriggerNoCost(Player aiPlayer, SpellAbility sa, boolean mandatory) {
         final String logic = sa.getParamOrDefault("AILogic", "");
         if (logic.startsWith("ManaRitual")) {
-            return doManaRitualLogic(aiPlayer, sa, true);
+            boolean result = doManaRitualLogic(aiPlayer, sa, true);
+            return result ? new AiAbilityDecision(100, AiPlayDecision.WillPlay) : new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
         }
 
-        return true;
+        return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
     }
     
     // Dark Ritual and other similar instants/sorceries that add mana to mana pool
@@ -159,7 +159,7 @@ public class ManaAi extends SpellAbilityAi {
         int numCounters = 0;
         int manaSurplus = 0;
         if ("Count$xPaid".equals(host.getSVar("X")) && sa.getPayCosts().hasSpecificCostType(CostRemoveCounter.class)) {
-            CounterType ctrType = CounterType.get(CounterEnumType.KI); // Petalmane Baku
+            CounterType ctrType = CounterEnumType.KI; // Petalmane Baku
             for (CostPart part : sa.getPayCosts().getCostParts()) {
                 if (part instanceof CostRemoveCounter) {
                     ctrType = ((CostRemoveCounter)part).counter;
@@ -217,7 +217,7 @@ public class ManaAi extends SpellAbilityAi {
             if (testSaNoCost == null) {
                 continue;
             }
-            testSaNoCost.setActivatingPlayer(ai, true);
+            testSaNoCost.setActivatingPlayer(ai);
             if (((PlayerControllerAi)ai.getController()).getAi().canPlaySa(testSaNoCost) == AiPlayDecision.WillPlay) {
                 if (testSa.getHostCard().isPermanent() && !testSa.getHostCard().hasKeyword(Keyword.HASTE)
                     && !ai.getGame().getPhaseHandler().is(PhaseType.MAIN2)) {
@@ -240,7 +240,7 @@ public class ManaAi extends SpellAbilityAi {
                 Arrays.asList(
                         CardPredicates.restriction(restrictValid.split(","), ai, host, sa),
                         CardPredicates.lessCMC(searchCMC),
-                        Predicates.or(CardPredicates.isColorless(), CardPredicates.isColor(producedColor))));
+                        CardPredicates.isColorless().or(CardPredicates.isColor(producedColor))));
 
         if (logic.startsWith("ManaRitualBattery")) {
             // Don't remove more counters than would be needed to cast the more expensive thing we want to cast,
@@ -255,7 +255,7 @@ public class ManaAi extends SpellAbilityAi {
 
     private boolean improvesPosition(Player ai, SpellAbility sa) {
         boolean activateForTrigger = (!ai.getManaPool().hasBurn() || !ai.canLoseLife() || ai.cantLoseForZeroOrLessLife()) &&
-                Iterables.any(Iterables.filter(sa.getHostCard().getTriggers(), CardTraitPredicates.hasParam("AILogic", "ActivateOnce")),
+                IterableUtil.any(IterableUtil.filter(sa.getHostCard().getTriggers(), CardTraitPredicates.hasParam("AILogic", "ActivateOnce")),
                 t -> sa.getHostCard().getAbilityActivatedThisTurn(t.getOverridingAbility()) == 0);
 
         PhaseHandler ph = ai.getGame().getPhaseHandler();
@@ -269,7 +269,7 @@ public class ManaAi extends SpellAbilityAi {
         Mana test = null;
         if (mp.isEmpty()) {
             // TODO use color from ability
-            test = new Mana((byte) ManaAtom.COLORLESS, source, null);
+            test = new Mana((byte) ManaAtom.COLORLESS, source, null, ai);
             mp.addMana(test, false);
         }
         boolean lose = mp.willManaBeLostAtEndOfPhase();

@@ -6,7 +6,6 @@ import java.util.Vector;
 import javax.swing.SwingUtilities;
 
 import com.google.common.collect.Iterables;
-
 import forge.deck.DeckProxy;
 import forge.localinstance.properties.ForgePreferences;
 import forge.localinstance.properties.ForgePreferences.FPref;
@@ -55,6 +54,7 @@ public class CLobby {
             // General updates when switching back to this view
             view.getBtnStart().requestFocusInWindow();
         });
+        view.getGamesInMatchBinder().load();
     }
 
     public void initialize() {

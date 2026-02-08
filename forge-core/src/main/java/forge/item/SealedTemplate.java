@@ -1,6 +1,5 @@
 package forge.item;
 
-import com.google.common.base.Function;
 import com.google.common.collect.Lists;
 import forge.item.generation.BoosterSlots;
 import forge.util.TextUtil;
@@ -11,12 +10,18 @@ import org.apache.commons.lang3.tuple.Pair;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 public class SealedTemplate {
 
     public final static SealedTemplate genericDraftBooster = new SealedTemplate(null, Lists.newArrayList(
             Pair.of(BoosterSlots.COMMON, 10), Pair.of(BoosterSlots.UNCOMMON, 3),
             Pair.of(BoosterSlots.RARE_MYTHIC, 1), Pair.of(BoosterSlots.BASIC_LAND, 1)
+    ));
+
+    // This is a generic cube booster. 15 cards, no rarity slots.
+    public final static SealedTemplate genericNoSlotBooster = new SealedTemplate(null, Lists.newArrayList(
+            Pair.of(BoosterSlots.ANY, 15)
     ));
 
     protected final List<Pair<String, Integer>> slots;

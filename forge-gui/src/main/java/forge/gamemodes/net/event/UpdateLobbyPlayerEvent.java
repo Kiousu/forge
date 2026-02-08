@@ -1,14 +1,14 @@
 package forge.gamemodes.net.event;
 
-import java.util.Collections;
-import java.util.Set;
-
 import forge.ai.AIOption;
 import forge.deck.CardPool;
 import forge.deck.Deck;
 import forge.deck.DeckSection;
 import forge.gamemodes.match.LobbySlotType;
 import forge.gamemodes.net.server.RemoteClient;
+
+import java.util.Collections;
+import java.util.Set;
 
 public final class UpdateLobbyPlayerEvent implements NetEvent {
     private static final long serialVersionUID = -7354695008599789571L;
@@ -29,13 +29,11 @@ public final class UpdateLobbyPlayerEvent implements NetEvent {
     private String SchemeDeckName = null;
     private String PlanarDeckName = null;
     private String DeckName = null;
+    private String aiProfile = null;
 
 
-    public static UpdateLobbyPlayerEvent create(final LobbySlotType type, final String name, final int avatarIndex, final int sleeveIndex, final int team, final boolean isArchenemy, final boolean isReady, final Set<AIOption> aiOptions) {
-        return new UpdateLobbyPlayerEvent(type, name, avatarIndex, sleeveIndex, team, isArchenemy, isReady, aiOptions);
-    }
-    public static UpdateLobbyPlayerEvent create(final LobbySlotType type, final String name, final int avatarIndex, final int sleeveIndex, final int team, final boolean isArchenemy, final boolean isReady, final boolean isDevMode, final Set<AIOption> aiOptions) {
-        return new UpdateLobbyPlayerEvent(type, name, avatarIndex, sleeveIndex, team, isArchenemy, isReady, isDevMode, aiOptions);
+    public static UpdateLobbyPlayerEvent create(final LobbySlotType type, final String name, final int avatarIndex, final int sleeveIndex, final int team, final boolean isArchenemy, final boolean isReady, final boolean isDevMode, final Set<AIOption> aiOptions, final String aiProfile) {
+        return new UpdateLobbyPlayerEvent(type, name, avatarIndex, sleeveIndex, team, isArchenemy, isReady, isDevMode, aiOptions, aiProfile);
     }
     public static UpdateLobbyPlayerEvent deckUpdate(final Deck deck) {
         return new UpdateLobbyPlayerEvent(deck);
@@ -46,6 +44,15 @@ public final class UpdateLobbyPlayerEvent implements NetEvent {
     public static UpdateLobbyPlayerEvent nameUpdate(final String name) {
         return new UpdateLobbyPlayerEvent(name);
     }
+
+    public static UpdateLobbyPlayerEvent aiProfileUpdate(String aiProfile) {
+        UpdateLobbyPlayerEvent event = new UpdateLobbyPlayerEvent();
+        event.setAiProfile(aiProfile);
+        return event;
+    }
+
+    // Private default constructure for setting specific fields.
+    private UpdateLobbyPlayerEvent() { }
 
     private UpdateLobbyPlayerEvent(String name) {
         this.name = name;
@@ -103,27 +110,9 @@ public final class UpdateLobbyPlayerEvent implements NetEvent {
             final int team,
             final boolean isArchenemy,
             final boolean isReady,
-            final Set<AIOption> aiOptions) {
-        this.type = type;
-        this.name = name;
-        this.avatarIndex = avatarIndex;
-        this.sleeveIndex = sleeveIndex;
-        this.team = team;
-        this.isArchenemy = isArchenemy;
-        this.isReady = isReady;
-        this.aiOptions = aiOptions;
-    }
-
-    private UpdateLobbyPlayerEvent(
-            final LobbySlotType type,
-            final String name,
-            final int avatarIndex,
-            final int sleeveIndex,
-            final int team,
-            final boolean isArchenemy,
-            final boolean isReady,
             final boolean isDevMode,
-            final Set<AIOption> aiOptions) {
+            final Set<AIOption> aiOptions,
+            final String aiProfile) {
         this.type = type;
         this.name = name;
         this.avatarIndex = avatarIndex;
@@ -133,6 +122,7 @@ public final class UpdateLobbyPlayerEvent implements NetEvent {
         this.isReady = isReady;
         this.isDevMode = isDevMode;
         this.aiOptions = aiOptions;
+        this.aiProfile = aiProfile;
     }
 
     @Override
@@ -179,4 +169,12 @@ public final class UpdateLobbyPlayerEvent implements NetEvent {
     public String getSchemeDeckName() { return SchemeDeckName; }
     public String getPlanarDeckName() { return PlanarDeckName; }
     public String getDeckName() { return DeckName; }
+
+    public void setAiProfile(String aiProfile) {
+        this.aiProfile = aiProfile;
+    }
+
+    public String getAiProfile() {
+        return aiProfile;
+    }
 }

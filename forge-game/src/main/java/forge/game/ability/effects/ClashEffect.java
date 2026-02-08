@@ -23,7 +23,7 @@ public class ClashEffect extends SpellAbilityEffect {
      */
     @Override
     protected String getStackDescription(final SpellAbility sa) {
-        return sa.getHostCard().getName() + " - Clash with an opponent.";
+        return sa.getHostCard().getDisplayName() + " - Clash with an opponent.";
     }
 
     /* (non-Javadoc)
@@ -51,7 +51,6 @@ public class ClashEffect extends SpellAbilityEffect {
             }
         }
 
-        // Run triggers
         final Map<AbilityKey, Object> runParams = AbilityKey.mapFromPlayer(player);
         runParams.put(AbilityKey.Won, player.equals(winner) ? "True" : "False");
         source.getGame().getTriggerHandler().runTrigger(TriggerType.Clashed, runParams, false);
@@ -102,7 +101,7 @@ public class ClashEffect extends SpellAbilityEffect {
             pCMC = pCard.getCMC();
             toReveal.add(pCard);
 
-            reveal.append(player).append(" " + Localizer.getInstance().getMessage("lblReveals") + ": ").append(pCard.getName()).append(". " + Localizer.getInstance().getMessage("lblCMC") + "= ").append(pCMC);
+            reveal.append(player).append(" " + Localizer.getInstance().getMessage("lblReveals") + ": ").append(pCard.getDisplayName()).append(". " + Localizer.getInstance().getMessage("lblCMC") + "= ").append(pCMC);
             reveal.append("\n");
         }
         if (!oLib.isEmpty()) {
@@ -110,7 +109,7 @@ public class ClashEffect extends SpellAbilityEffect {
             oCMC = oCard.getCMC();
             toReveal.add(oCard);
 
-            reveal.append(opponent).append(" " + Localizer.getInstance().getMessage("lblReveals") + ": ").append(oCard.getName()).append(". " + Localizer.getInstance().getMessage("lblCMC") + "= ").append(oCMC);
+            reveal.append(opponent).append(" " + Localizer.getInstance().getMessage("lblReveals") + ": ").append(oCard.getDisplayName()).append(". " + Localizer.getInstance().getMessage("lblCMC") + "= ").append(oCMC);
             reveal.append("\n");
         }
 
@@ -139,7 +138,7 @@ public class ClashEffect extends SpellAbilityEffect {
         final GameAction action = p.getGame().getAction();
         final boolean putOnTop = p.getController().willPutCardOnTop(c);
         final String location = putOnTop ? "top" : "bottom";
-        final String clashOutcome = p.getName() + " clashed and put " + c.getName() + " to the " + location + " of library.";
+        final String clashOutcome = p.getName() + " clashed and put " + c.getDisplayName() + " to the " + location + " of library.";
 
         if (putOnTop) {
             action.moveToLibrary(c, sa);

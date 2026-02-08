@@ -4,8 +4,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
-import com.google.common.base.Function;
 import com.google.common.collect.Lists;
 
 import forge.card.CardEdition;
@@ -102,10 +102,10 @@ public enum GroupDef {
                         return 2;
                     }
                     if (type.isArtifact()) {
-                        return 4;
+                        return type.isLand() ? 6 : 4;
                     }
                     if (type.isEnchantment()) {
-                        return 5;
+                        return type.isLand() ? 6 : 5;
                     }
                     if (type.isBattle()) {
                         return 7;

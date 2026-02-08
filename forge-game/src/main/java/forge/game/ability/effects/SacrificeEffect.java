@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import forge.card.CardType;
 import forge.game.card.*;
 import forge.util.Lang;
 import org.apache.commons.lang3.StringUtils;
@@ -21,7 +20,7 @@ import forge.game.ability.SpellAbilityEffect;
 import forge.game.cost.Cost;
 import forge.game.keyword.Keyword;
 import forge.game.player.Player;
-import forge.game.player.PlayerController.ManaPaymentPurpose;
+import forge.game.player.PlayerCollection;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.TriggerType;
 import forge.game.zone.ZoneType;
@@ -42,8 +41,7 @@ public class SacrificeEffect extends SpellAbilityEffect {
                     && activator.getController().confirmAction(sa, null, Localizer.getInstance().getMessage("lblDoYouWantPayEcho") + " {0}?", null)) {
                 isPaid = true;
             } else {
-                isPaid = activator.getController().payManaOptional(host, new Cost(sa.getParam("Echo"), true),
-                    sa, Localizer.getInstance().getMessage("lblPayEcho"), ManaPaymentPurpose.Echo);
+                isPaid = activator.getController().payCostToPreventEffect(new Cost(sa.getParam("Echo"), true), sa, false, new PlayerCollection(activator));
             }
             final Map<AbilityKey, Object> runParams = AbilityKey.mapFromCard(host);
             runParams.put(AbilityKey.EchoPaid, isPaid);
@@ -66,10 +64,7 @@ public class SacrificeEffect extends SpellAbilityEffect {
 
             game.updateLastStateForCard(host);
 
-            StringBuilder sb = new StringBuilder();
-            sb.append("Cumulative upkeep for ").append(host);
-
-            boolean isPaid = activator.getController().payManaOptional(host, payCost, sa, sb.toString(), ManaPaymentPurpose.CumulativeUpkeep);
+            boolean isPaid = activator.getController().payCostToPreventEffect(payCost, sa, false, new PlayerCollection(activator));
             final Map<AbilityKey, Object> runParams = AbilityKey.mapFromCard(host);
             runParams.put(AbilityKey.CumulativeUpkeepPaid, isPaid);
             runParams.put(AbilityKey.PayingMana, StringUtils.join(sa.getPayingMana(), ""));
@@ -86,8 +81,12 @@ public class SacrificeEffect extends SpellAbilityEffect {
         final boolean sacEachValid = sa.hasParam("SacEachValid");
 
         String valid = sa.getParamOrDefault("SacValid", "Self");
-        String msg = sa.getParamOrDefault("SacMessage", valid);
-        msg = CardType.CoreType.isValidEnum(msg) ? msg.toLowerCase() : msg;
+        String msg;
+        if (sa.hasParam("SacMessage")) {
+            msg = sa.getParam("SacMessage");
+        } else {
+            msg = Lang.getInstance().buildValidDesc(List.of(valid.split(",")), false);
+        }
 
         final boolean destroy = sa.hasParam("Destroy");
         final boolean remSacrificed = sa.hasParam("RememberSacrificed");
@@ -96,12 +95,11 @@ public class SacrificeEffect extends SpellAbilityEffect {
         CardZoneTable zoneMovements = AbilityKey.addCardZoneTableParams(params, sa);
 
         if (valid.equals("Self") && game.getZoneOf(host) != null) {
-            if (host.getController().equals(activator) && game.getZoneOf(host).is(ZoneType.Battlefield)) {
-                if (!optional || activator.getController().confirmAction(sa, null,
-                        Localizer.getInstance().getMessage("lblDoYouWantSacrificeThis", host.getName()), null)) {
-                    if (game.getAction().sacrifice(new CardCollection(host), sa, true, params) != null && remSacrificed) {
-                        host.addRemembered(host);
-                    }
+            if (host.getController().equals(activator) && game.getZoneOf(host).is(ZoneType.Battlefield) &&
+                    (!optional || activator.getController().confirmAction(sa, null,
+                        Localizer.getInstance().getMessage("lblDoYouWantSacrificeThis", host.getDisplayName()), null))) {
+                if (game.getAction().sacrifice(new CardCollection(host), sa, true, params) != null && remSacrificed) {
+                    host.addRemembered(host);
                 }
             }
         } else {
@@ -213,8 +211,12 @@ public class SacrificeEffect extends SpellAbilityEffect {
             sb.append(Lang.joinHomogenous(tgts)).append(" ");
             boolean oneTgtP = tgts.size() == 1;
 
-            String msg = sa.getParamOrDefault("SacMessage", valid);
-            msg = CardType.CoreType.isValidEnum(msg) ? msg.toLowerCase() : msg;
+            String msg;
+            if (sa.hasParam("SacMessage")) {
+                msg = sa.getParam("SacMessage");
+            } else {
+                msg = Lang.getInstance().buildValidDesc(List.of(valid.split(",")), false);
+            }
 
             if (sa.hasParam("Destroy")) {
                 sb.append(oneTgtP ? "destroys " : " destroy ");

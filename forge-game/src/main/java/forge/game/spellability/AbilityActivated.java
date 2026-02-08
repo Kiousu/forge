@@ -22,6 +22,7 @@ import forge.game.card.Card;
 import forge.game.cost.Cost;
 import forge.game.cost.CostPayment;
 import forge.game.player.Player;
+import forge.game.player.PlayerController.FullControlFlag;
 import forge.game.staticability.StaticAbilityCantBeCast;
 
 /**
@@ -91,11 +92,12 @@ public abstract class AbilityActivated extends SpellAbility implements Cloneable
             return false;
         }
 
-        if (!(this.getRestrictions().canPlay(c, this))) {
+        if (!getRestrictions().canPlay(c, this)) {
             return false;
         }
 
-        return CostPayment.canPayAdditionalCosts(this.getPayCosts(), this, false);
+        return player.getController().isFullControl(FullControlFlag.AllowPaymentStartWithMissingResources)
+                || CostPayment.canPayAdditionalCosts(this.getPayCosts(), this, false);
     }
 
     /** {@inheritDoc} */

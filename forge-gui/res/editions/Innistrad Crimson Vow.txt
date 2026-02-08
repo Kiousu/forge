@@ -2,7 +2,6 @@
 Code=VOW
 Date=2021-11-19
 Name=Innistrad: Crimson Vow
-Code2=VOW
 Type=Expansion
 ScryfallCode=VOW
 Booster=10 Common:fromSheet("VOW cards"), 3 Uncommon:fromSheet("VOW cards"), 1 RareMythic:fromSheet("VOW cards"), 1 BasicLand
@@ -341,23 +340,23 @@ Prerelease=6 Boosters, 1 RareMythic+
 326 R Old Rutstein @Mark Riddick
 327 R Runo Stromkirk @Nico Delort
 328 R Torens, Fist of the Angels @Cabrol
-329 U Circle of Confinement @Dan Murayama Scott
-330 M Savior of Ollenbock @Johannes Voss
-331 R Thalia, Guardian of Thraben @Magali Villeneuve
-332 M Jacob Hauken, Inspector @Slawomir Maniak
-333 U Thirst for Discovery @Dan Murayama Scott
-334 R Falkenrath Forebear @Greg Staples
-335 M Henrika Domnathi @Nils Hamm
-336 U Innocent Traveler @Igor Kieryluk
-337 M Sorin the Mirthless @Bastien L. Deharme
-338 R Voldaren Bloodcaster @Johann Bodin
-339 U Vampires' Vengeance @Dave Kendall
-340 U Reclusive Taxidermist @Tomasz Jedruszek
-341 R Edgar, Charmed Groom @Lucas Graciano
-342 R Eruth, Tormented Prophet @Dave Kendall
-343 M Olivia, Crimson Bride @Bastien L. Deharme
-344 R Torens, Fist of the Angels @Greg Staples
-345 R Investigator's Journal @Alix Branwyn
+329 U Circle of Confinement @Dan Murayama Scott ${"flavorName": "Van Helsing's Holy Ward"}
+330 M Savior of Ollenbock @Johannes Voss ${"flavorName": "Abraham Van Helsing"}
+331 R Thalia, Guardian of Thraben @Magali Villeneuve ${"flavorName": "Mina Harker"}
+332 M Jacob Hauken, Inspector @Slawomir Maniak ${"flavorName": "Jonathan Harker // Harker's Obsessive Inquiry"}
+333 U Thirst for Discovery @Dan Murayama Scott ${"flavorName": "Search the Count's Castle"}
+334 R Falkenrath Forebear @Greg Staples ${"flavorName": "Dracula, Blood Immortal"}
+335 M Henrika Domnathi @Nils Hamm ${"flavorName": "The Three Weird Sisters // Fiends of Darkest Night"}
+336 U Innocent Traveler @Igor Kieryluk ${"flavorName": "Lucy Westenra // Lucy, Arisen Vampire"}
+337 M Sorin the Mirthless @Bastien L. Deharme ${"flavorName": "Count Dracula"}
+338 R Voldaren Bloodcaster @Johann Bodin ${"flavorName": "Dracula, Lord of Blood // Dracula, Lord of Bats"}
+339 U Vampires' Vengeance @Dave Kendall ${"flavorName": "Mysterious Blood Illness"}
+340 U Reclusive Taxidermist @Tomasz Jedruszek ${"flavorName": "Quincey Harker"}
+341 R Edgar, Charmed Groom @Lucas Graciano ${"flavorName": "Dracula the Voyager // Casket of Native Earth"}
+342 R Eruth, Tormented Prophet @Dave Kendall ${"flavorName": "Renfield, Delusional Minion"}
+343 M Olivia, Crimson Bride @Bastien L. Deharme ${"flavorName": "Sisters of the Undead"}
+344 R Torens, Fist of the Angels @Greg Staples ${"flavorName": "Dr. John Seward"}
+345 R Investigator's Journal @Alix Branwyn ${"flavorName": "Harker's Journal"}
 
 [extended art]
 346 R By Invitation Only @Micah Epstein
@@ -412,6 +411,8 @@ Prerelease=6 Boosters, 1 RareMythic+
 395 R Dollhouse of Horrors @Muhammad Firdaus
 396 R Investigator's Journal @Yeong-Hao Han
 397 R Voldaren Estate @Richard Wright
+
+[bundle]
 398 L Plains @Sam White
 399 L Island @Sam White
 400 L Swamp @Sam White
@@ -419,7 +420,7 @@ Prerelease=6 Boosters, 1 RareMythic+
 402 L Forest @Sam White
 
 [buy a box]
-403 R Voldaren Estate @Cliff Childs
+403 R Voldaren Estate @Cliff Childs ${"flavorName": "Castle Dracula"}
 
 [promo]
 404 R Sigarda's Summons @Wisnu Tan
@@ -433,35 +434,40 @@ Prerelease=6 Boosters, 1 RareMythic+
 412 L Forest @Pig Hands
 
 [rebalanced]
-A48 C A-Binding Geist @Campbell White
-A52 U A-Cobbled Lancer @Igor Kieryluk
-A58 R A-Dreamshackle Geist @Andreas Zafiratos
-A62 U A-Gutter Skulker @Viko Menezes
-A63 R A-Hullbreaker Horror @Svetlin Velinov
-A66 C A-Lantern Bearer @Zoltan Boros
-A69 U A-Mischievous Catgeist @Denman Rooke
-A81 C A-Stitched Assistant @Andrey Kuzinskiy
-A233 U A-Brine Comber @Olena Richards
-A235 R A-Dorothea, Vengeful Victim @Marta Nael
-A247 U A-Sigardian Paladin @Slawomir Maniak
-A248 U A-Skull Skaab @Nicholas Gregory
+A-48 C A-Binding Geist @Campbell White
+A-52 U A-Cobbled Lancer @Igor Kieryluk
+A-58 R A-Dreamshackle Geist @Andreas Zafiratos
+A-62 U A-Gutter Skulker @Viko Menezes
+A-66 C A-Lantern Bearer @Zoltan Boros
+A-69 U A-Mischievous Catgeist @Denman Rooke
+A-81 C A-Stitched Assistant @Andrey Kuzinskiy
+A-233 U A-Brine Comber @Olena Richards
+A-235 R A-Dorothea, Vengeful Victim @Marta Nael
+A-247 U A-Sigardian Paladin @Slawomir Maniak
+A-248 U A-Skull Skaab @Nicholas Gregory
 
 [tokens]
-b_1_1_slug
-b_2_2_zombie
-b_2_3_vampire_flying_lifelink
-c_a_blood_draw
-c_a_treasure_sac
-g_1_1_insect
-g_2_2_wolf
-g_3_1_boar
-gw_1_1_human_soldier_training
-r_1_1_human
-r_3_2_wolf
-r_x_x_dragon_illusion_flying_haste
-u_x_x_zombie
-w_1_1_human
-w_1_1_spirit_flying
-w_4_4_spirit_flying
-w_x_x_spirit_cleric_total_spirits
-wb_1_1_vampire_lifelink
+1 w_1_1_human @Miguel Mercado
+2 w_1_1_spirit_flying @Kim Sokol
+3 w_4_4_spirit_flying @Eelis Kyttanen
+4 w_x_x_spirit_cleric_total_spirits @Jarel Threat
+5 u_x_x_zombie @Dave Kendall
+6 b_1_1_slug @Joe Slucher
+7 b_2_3_vampire_flying_lifelink @Néstor Ossandón Leal
+8 b_2_2_zombie @Chris Cold
+9 r_x_x_dragon_illusion_flying_haste @Andrew Mar
+10 r_1_1_human @Dan Murayama Scott
+11 r_3_2_wolf @Antonio José Manzanedo
+12 g_3_1_boar @Nicholas Gregory
+13 g_1_1_insect @Joe Slucher
+14 g_2_2_wolf @Andrea Radeck
+15 gw_1_1_human_soldier_training @Campbell White
+16 wb_1_1_vampire_lifelink @Zoltan Boros
+17 c_a_blood_draw @Miranda Meeks
+18 c_a_treasure_sac @Josu Hernaiz
+
+[other]
+19 copy @Brian Valeza
+20 emblem_chandra_dressed_to_kill @Viktor Titov
+21 day @Johan Grenier
+21☇ night @Johan Grenier

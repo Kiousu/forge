@@ -1,16 +1,7 @@
 package forge.ai.ability;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-
 import com.google.common.collect.Lists;
-
-import forge.ai.AiController;
-import forge.ai.AiPlayDecision;
-import forge.ai.ComputerUtilAbility;
-import forge.ai.PlayerControllerAi;
-import forge.ai.SpellAbilityAi;
+import forge.ai.*;
 import forge.game.ability.AbilityUtils;
 import forge.game.ability.effects.CharmEffect;
 import forge.game.card.Card;
@@ -18,12 +9,15 @@ import forge.game.player.Player;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 import forge.util.Aggregates;
-import forge.util.MyRandom;
 import forge.util.collect.FCollection;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
 public class CharmAi extends SpellAbilityAi {
     @Override
-    protected boolean checkApiLogic(Player ai, SpellAbility sa) {
+    protected AiAbilityDecision checkApiLogic(Player ai, SpellAbility sa) {
         final Card source = sa.getHostCard();
         List<AbilitySub> choices = CharmEffect.makePossibleOptions(sa);
 
@@ -37,13 +31,14 @@ public class CharmAi extends SpellAbilityAi {
         }
 
         boolean timingRight = sa.isTrigger(); //is there a reason to play the charm now?
+        boolean choiceForOpp = !ai.equals(sa.getActivatingPlayer());
 
         // Reset the chosen list otherwise it will be locked in forever by earlier calls
         sa.setChosenList(null);
         sa.setSubAbility(null);
         List<AbilitySub> chosenList;
-        
-        if (!ai.equals(sa.getActivatingPlayer())) {
+
+        if (choiceForOpp) {
             // This branch is for "An Opponent chooses" Charm spells from Alliances
             // Current just choose the first available spell, which seem generally less disastrous for the AI.
             chosenList = choices.subList(1, choices.size());
@@ -74,52 +69,58 @@ public class CharmAi extends SpellAbilityAi {
                 // Set minimum choices for triggers where chooseMultipleOptionsAi() returns null
                 chosenList = chooseOptionsAi(sa, choices, ai, true, num, min);
                 if (chosenList.isEmpty() && min != 0) {
-                    return false;
+                    return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
                 }
             } else {
-                return false;
+                return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
             }
         }
 
         // store the choices so they'll get reused
         sa.setChosenList(chosenList);
+
+        if (choiceForOpp) {
+            return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
+        }
+
         if (sa.isSpell()) {
             // prebuild chain to improve cost calculation accuracy
             CharmEffect.chainAbilities(sa, chosenList);
         }
 
-        // prevent run-away activations - first time will always return true
-        return MyRandom.getRandom().nextFloat() <= Math.pow(.6667, sa.getActivationsThisTurn());
+        return super.checkApiLogic(ai, sa);
     }
 
-    private List<AbilitySub> chooseOptionsAi(SpellAbility sa, List<AbilitySub> choices, final Player ai, boolean isTrigger, int num,
-            int min) {
+    private List<AbilitySub> chooseOptionsAi(SpellAbility sa, List<AbilitySub> choices, final Player ai, boolean isTrigger, int num, int min) {
         List<AbilitySub> chosenList = Lists.newArrayList();
         AiController aic = ((PlayerControllerAi) ai.getController()).getAi();
-        boolean allowRepeat = sa.hasParam("CanRepeatModes"); // FIXME: unused for now, the AI doesn't know how to effectively handle repeated choices
+        // TODO unused for now, the AI doesn't know how to effectively handle repeated choices
+        boolean allowRepeat = sa.hasParam("CanRepeatModes");
 
         // Pawprint
         final int pawprintLimit = sa.hasParam("Pawprint") ? AbilityUtils.calculateAmount(sa.getHostCard(), sa.getParam("Pawprint"), sa) : 0;
         if (pawprintLimit > 0) {
-            Collections.reverse(choices); // try to pay for the more expensive subs first
+            // try to pay for the more expensive subs first
+            Collections.reverse(choices);
         }
         int pawprintAmount = 0;
 
         // First pass using standard canPlayAi() for good choices
         for (AbilitySub sub : choices) {
-            sub.setActivatingPlayer(ai, true);
+            sub.setActivatingPlayer(ai);
+            // TODO refactor to obtain the AiAbilityDecision instead, then we can check all to sort by value
             if (AiPlayDecision.WillPlay == aic.canPlaySa(sub)) {
                 if (pawprintLimit > 0) {
                     int curPawprintAmount = AbilityUtils.calculateAmount(sub.getHostCard(), sub.getParamOrDefault("Pawprint", "0"), sub);
                     if (pawprintAmount + curPawprintAmount > pawprintLimit) {
                         continue;
-                    } else {
-                        pawprintAmount += curPawprintAmount;
                     }
+                    pawprintAmount += curPawprintAmount;
                 }
                 chosenList.add(sub);
                 if (chosenList.size() == num) {
-                    return chosenList; // maximum choices reached
+                    // maximum choices reached
+                    return chosenList;
                 }
             }
         }
@@ -148,7 +149,8 @@ public class CharmAi extends SpellAbilityAi {
             }
         }
         if (chosenList.size() < min) {
-            chosenList.clear(); // not enough choices
+            // not enough choices
+            chosenList.clear();
         }
         return chosenList;
     }
@@ -183,12 +185,12 @@ public class CharmAi extends SpellAbilityAi {
         }
         
         if (!ai.canLoseLife() || ai.cantLose()) {
-            // ai cant lose life, or cant lose the game, don't think about others
+            // ai can't lose life, or can't lose the game, don't think about others
             chosenList.add(allyTainted ? gain : lose);
         } else if (oppTainted || ai.getGame().isCardInPlay("Rain of Gore")) {
             // Rain of Gore does negate lifegain, so don't benefit the others
             // same for if a opponent does control Tainted Remedy
-            // but if ai cant gain life, the effects are negated
+            // but if ai can't gain life, the effects are negated
             chosenList.add(ai.canGainLife() ? lose : gain);
         } else if (ai.getGame().isCardInPlay("Sulfuric Vortex")) {
             // no life gain, but extra life loss.
@@ -204,7 +206,7 @@ public class CharmAi extends SpellAbilityAi {
             // critical Life try to gain more
             chosenList.add(gain);
         } else if (!ai.canGainLife() && aiLife == 14) {
-            // ai cant gain life, but try to avoid falling to 13
+            // ai can't gain life, but try to avoid falling to 13
             // but if a opponent does control Tainted Remedy its irrelevant
             chosenList.add(oppTainted ? lose : gain);
         } else if (allyTainted) {
@@ -246,13 +248,13 @@ public class CharmAi extends SpellAbilityAi {
         List<AbilitySub> chosenList = Lists.newArrayList();
         AiController aic = ((PlayerControllerAi) ai.getController()).getAi();
         for (AbilitySub sub : choices) {
-            sub.setActivatingPlayer(ai, true);
+            sub.setActivatingPlayer(ai);
             // Assign generic good choice to fill up choices if necessary 
             if ("Good".equals(sub.getParam("AILogic")) && aic.doTrigger(sub, false)) {
                 goodChoice = sub;
             } else {
                 // Standard canPlayAi()
-                sub.setActivatingPlayer(ai, true);
+                sub.setActivatingPlayer(ai);
                 if (AiPlayDecision.WillPlay == aic.canPlaySa(sub)) {
                     chosenList.add(sub);
                     if (chosenList.size() == min) {
@@ -277,10 +279,10 @@ public class CharmAi extends SpellAbilityAi {
     }
 
     @Override
-    public boolean chkDrawbackWithSubs(Player aiPlayer, AbilitySub ab) {
+    public AiAbilityDecision chkDrawbackWithSubs(Player aiPlayer, AbilitySub ab) {
         // choices were already targeted
         if (ab.getRootAbility().getChosenList() != null) {
-            return true;
+            return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
         }
         return super.chkDrawbackWithSubs(aiPlayer, ab);
     }

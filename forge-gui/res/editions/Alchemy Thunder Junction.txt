@@ -3,6 +3,7 @@ Code=YOTJ
 Date=2024-05-07
 Name=Alchemy: Thunder Junction
 Type=Online
+Booster=1 UncommonRareMythic,8 Common:fromsheet("OTJ cards"), 3 Uncommon:fromSheet("OTJ cards"), 1 UncommonRareMythic:fromSheet("OTJ cards"), 1 RareMythic:fromSheet("OTJ cards"), 1 BasicLand:fromSheet("OTJ cards")
 ScryfallCode=YOTJ
 
 [cards]
@@ -36,6 +37,3 @@ ScryfallCode=YOTJ
 28 R Vona de Iedo, the Antifex @Fajareka Setiawan
 29 U Weave the Nightmare @Wayne Wu
 30 U Runecarved Obelisk @Jorge Jacinto
-
-[tokens]
-w_x_x_avatar

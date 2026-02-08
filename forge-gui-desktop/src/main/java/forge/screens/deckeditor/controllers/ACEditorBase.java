@@ -20,18 +20,15 @@ package forge.screens.deckeditor.controllers;
 import java.awt.Toolkit;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map.Entry;
-import java.util.Set;
 
 import javax.swing.JMenu;
 import javax.swing.JPopupMenu;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 
-import com.google.common.collect.Iterables;
-
+import forge.card.ColorSet;
 import forge.card.MagicColor;
 import forge.deck.CardPool;
 import forge.deck.Deck;
@@ -66,10 +63,7 @@ import forge.toolbox.ContextMenuBuilder;
 import forge.toolbox.FComboBox;
 import forge.toolbox.FLabel;
 import forge.toolbox.FSkin;
-import forge.util.Aggregates;
-import forge.util.ItemPool;
-import forge.util.Lang;
-import forge.util.Localizer;
+import forge.util.*;
 import forge.view.FView;
 
 /**
@@ -237,7 +231,7 @@ public abstract class ACEditorBase<TItem extends InventoryItem, TModel extends D
                     max = cardCopies;
                 }
 
-                Entry<String, Integer> cardAmountInfo = Iterables.find(cardsByName,
+                Entry<String, Integer> cardAmountInfo = IterableUtil.find(cardsByName,
                         t -> t.getKey().equals(card.getRules().getNormalizedName()), null);
                 if (cardAmountInfo != null) {
                     max -= cardAmountInfo.getValue();
@@ -587,9 +581,9 @@ public abstract class ACEditorBase<TItem extends InventoryItem, TModel extends D
             int val;
             if ((val = existingCard.getRules().getSetColorID()) > 0) {
                 GuiUtils.addMenuItem(menu, label, null, () -> {
-                    Set<String> colors = new HashSet<>(GuiChoose.getChoices(localizer.getMessage("lblChooseNColors", Lang.getNumeral(val)), val, val, MagicColor.Constant.ONLY_COLORS));
+                    List<String> colors = GuiChoose.getChoices(localizer.getMessage("lblChooseNColors", Lang.getNumeral(val)), val, val, MagicColor.Constant.ONLY_COLORS);
                     // make an updated version
-                    PaperCard updated = existingCard.getColorIDVersion(colors);
+                    PaperCard updated = existingCard.copyWithMarkedColors(ColorSet.fromNames(colors));
                     // remove *quantity* instances of existing card
                     CDeckEditorUI.SINGLETON_INSTANCE.removeSelectedCards(false, 1);
                     // add *quantity* into the deck and set them as selected

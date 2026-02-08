@@ -1,13 +1,14 @@
 package forge.ai;
 
-import java.util.Map;
-
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
-
 import forge.ai.ability.*;
 import forge.game.ability.ApiType;
+import forge.game.spellability.SpellAbility;
 import forge.util.ReflectionUtil;
+
+import java.security.InvalidParameterException;
+import java.util.Map;
 
 public enum SpellApiToAi {
     Converter;
@@ -22,22 +23,27 @@ public enum SpellApiToAi {
             .put(ApiType.AddOrRemoveCounter, CountersPutOrRemoveAi.class)
             .put(ApiType.AddPhase, AddPhaseAi.class)
             .put(ApiType.AddTurn, AddTurnAi.class)
+            .put(ApiType.AdvanceCrank, AdvanceCrankAi.class)
+            .put(ApiType.Airbend, AirbendAi.class)
             .put(ApiType.AlterAttribute, AlterAttributeAi.class)
             .put(ApiType.Amass, AmassAi.class)
             .put(ApiType.Animate, AnimateAi.class)
             .put(ApiType.AnimateAll, AnimateAllAi.class)
             .put(ApiType.Attach, AttachAi.class)
             .put(ApiType.Ascend, AlwaysPlayAi.class)
+            .put(ApiType.AssembleContraption, AssembleContraptionAi.class)
             .put(ApiType.AssignGroup, AssignGroupAi.class)
             .put(ApiType.Balance, BalanceAi.class)
             .put(ApiType.BecomeMonarch, AlwaysPlayAi.class)
             .put(ApiType.BecomesBlocked, BecomesBlockedAi.class)
             .put(ApiType.BidLife, BidLifeAi.class)
             .put(ApiType.BlankLine, AlwaysPlayAi.class)
+            .put(ApiType.Blight, BlightAi.class)
             .put(ApiType.Bond, BondAi.class)
             .put(ApiType.Branch, BranchAi.class)
             .put(ApiType.Camouflage, ChooseCardAi.class)
             .put(ApiType.ChangeCombatants, ChangeCombatantsAi.class)
+            .put(ApiType.ChangeSpeed, AlwaysPlayAi.class)
             .put(ApiType.ChangeTargets, ChangeTargetsAi.class)
             .put(ApiType.ChangeX, AlwaysPlayAi.class)
             .put(ApiType.ChangeZone, ChangeZoneAi.class)
@@ -53,8 +59,9 @@ public enum SpellApiToAi {
             .put(ApiType.ChooseSector, AlwaysPlayAi.class)
             .put(ApiType.ChooseSource, ChooseSourceAi.class)
             .put(ApiType.ChooseType, ChooseTypeAi.class)
+            .put(ApiType.ClaimThePrize, AlwaysPlayAi.class)
             .put(ApiType.Clash, ClashAi.class)
-            .put(ApiType.ClassLevelUp, AlwaysPlayAi.class)
+            .put(ApiType.ClassLevelUp, ClassLevelUpAi.class)
             .put(ApiType.Cleanup, AlwaysPlayAi.class)
             .put(ApiType.Cloak, CloakAi.class)
             .put(ApiType.Clone, CloneAi.class)
@@ -81,8 +88,10 @@ public enum SpellApiToAi {
             .put(ApiType.DrainMana, DrainManaAi.class)
             .put(ApiType.Draw, DrawAi.class)
             .put(ApiType.EachDamage, DamageEachAi.class)
+            .put(ApiType.Earthbend, EarthbendAi.class)
             .put(ApiType.Effect, EffectAi.class)
             .put(ApiType.Encode, EncodeAi.class)
+            .put(ApiType.Endure, EndureAi.class)
             .put(ApiType.EndCombatPhase, EndTurnAi.class)
             .put(ApiType.EndTurn, EndTurnAi.class)
             .put(ApiType.ExchangeLife, LifeExchangeAi.class)
@@ -125,6 +134,7 @@ public enum SpellApiToAi {
             .put(ApiType.Mutate, MutateAi.class)
             .put(ApiType.NameCard, ChooseCardNameAi.class)
             //.put(ApiType.NoteCounters, AlwaysPlayAi.class)
+            .put(ApiType.OpenAttraction, AssembleContraptionAi.class)
             .put(ApiType.PeekAndReveal, PeekAndRevealAi.class)
             .put(ApiType.PermanentCreature, PermanentCreatureAi.class)
             .put(ApiType.PermanentNoncreature, PermanentNoncreatureAi.class)
@@ -188,8 +198,7 @@ public enum SpellApiToAi {
             .put(ApiType.TimeTravel, TimeTravelAi.class)
             .put(ApiType.Token, TokenAi.class)
             .put(ApiType.TwoPiles, TwoPilesAi.class)
-            .put(ApiType.Unattach, CannotPlayAi.class)
-            .put(ApiType.UnattachAll, UnattachAllAi.class)
+            .put(ApiType.Unattach, UnattachAi.class)
             .put(ApiType.UnlockDoor, AlwaysPlayAi.class)
             .put(ApiType.Untap, UntapAi.class)
             .put(ApiType.UntapAll, UntapAllAi.class)
@@ -203,6 +212,14 @@ public enum SpellApiToAi {
             .put(ApiType.InternalIgnoreEffect, CannotPlayAi.class)
             .put(ApiType.InternalRadiation, AlwaysPlayAi.class)
             .build());
+
+    public SpellAbilityAi get(final SpellAbility sa) {
+        ApiType api = sa.getApi();
+        if (null == api) {
+            throw new InvalidParameterException("SA is not api-based, this is not supported yet");
+        }
+        return get(api);
+    }
 
     public SpellAbilityAi get(final ApiType api) {
         SpellAbilityAi result = apiToInstance.get(api);

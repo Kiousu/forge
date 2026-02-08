@@ -1,26 +1,16 @@
 package forge.gui.control;
 
-import java.util.concurrent.BrokenBarrierException;
-import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.atomic.AtomicBoolean;
-
 import com.google.common.eventbus.Subscribe;
-
 import forge.game.Game;
 import forge.game.card.CardView;
-import forge.game.event.GameEvent;
-import forge.game.event.GameEventBlockersDeclared;
-import forge.game.event.GameEventGameFinished;
-import forge.game.event.GameEventGameStarted;
-import forge.game.event.GameEventLandPlayed;
-import forge.game.event.GameEventPlayerPriority;
-import forge.game.event.GameEventSpellAbilityCast;
-import forge.game.event.GameEventSpellResolved;
-import forge.game.event.GameEventTurnPhase;
-import forge.game.event.IGameEventVisitor;
+import forge.game.event.*;
 import forge.gamemodes.match.input.InputPlaybackControl;
 import forge.gui.FThreads;
 import forge.player.PlayerControllerHuman;
+
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class FControlGamePlayback extends IGameEventVisitor.Base<Void> {
     private InputPlaybackControl inputPlayback;
@@ -85,9 +75,9 @@ public class FControlGamePlayback extends IGameEventVisitor.Base<Void> {
     @Override
     public Void visit(final GameEventTurnPhase ev) {
         try {
-            final boolean isUiToStop = !humanController.getGui().isUiSetToSkipPhase(ev.playerTurn.getView(), ev.phase);
+            final boolean isUiToStop = !humanController.getGui().isUiSetToSkipPhase(ev.playerTurn().getView(), ev.phase());
 
-            switch (ev.phase) {
+            switch (ev.phase()) {
             case COMBAT_END:
             case COMBAT_DECLARE_ATTACKERS:
             case COMBAT_DECLARE_BLOCKERS:
@@ -131,7 +121,7 @@ public class FControlGamePlayback extends IGameEventVisitor.Base<Void> {
 
     @Override
     public Void visit(final GameEventSpellResolved event) {
-        FThreads.invokeInEdtNowOrLater(() -> humanController.getGui().setCard(CardView.get(event.spell.getHostCard())));
+        FThreads.invokeInEdtNowOrLater(() -> humanController.getGui().setCard(CardView.get(event.spell().getHostCard())));
         pauseForEvent(resolveDelay);
         return null;
     }
@@ -141,7 +131,7 @@ public class FControlGamePlayback extends IGameEventVisitor.Base<Void> {
      */
     @Override
     public Void visit(final GameEventSpellAbilityCast event) {
-        FThreads.invokeInEdtNowOrLater(() -> humanController.getGui().setCard(CardView.get(event.sa.getHostCard())));
+        FThreads.invokeInEdtNowOrLater(() -> humanController.getGui().setCard(CardView.get(event.sa().getHostCard())));
         pauseForEvent(castDelay);
         return null;
     }

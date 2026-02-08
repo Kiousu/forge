@@ -11,7 +11,6 @@ import forge.game.replacement.ReplacementResult;
 import forge.game.replacement.ReplacementType;
 import forge.game.spellability.SpellAbility;
 import forge.game.spellability.SpellAbilityStackInstance;
-import forge.game.spellability.SpellPermanent;
 import forge.game.trigger.TriggerType;
 import forge.game.zone.ZoneType;
 import forge.util.Localizer;
@@ -21,6 +20,13 @@ import java.util.List;
 import java.util.Map;
 
 public class CounterEffect extends SpellAbilityEffect {
+    @Override
+    public void buildSpellAbility(SpellAbility sa) {
+        if (sa.usesTargeting()) {
+            sa.getTargetRestrictions().setZone(ZoneType.Stack);
+        }
+    }
+
     @Override
     protected String getStackDescription(SpellAbility sa) {
         final StringBuilder sb = new StringBuilder();
@@ -81,18 +87,12 @@ public class CounterEffect extends SpellAbilityEffect {
                 continue;
             }
 
-            if (sa.hasParam("CounterNoManaSpell") && tgtSA.isSpell() && tgtSA.getTotalManaSpent() != 0) {
-                continue;
-            }
-
             if (sa.hasParam("ConditionWouldDestroy") && !checkForConditionWouldDestroy(sa, tgtSA)) {
                 continue;
             }
 
-            if (sa.hasParam("RememberSplicedOntoCounteredSpell")) {
-                if (tgtSA.getSplicedCards() != null) {
-                    sa.getHostCard().addRemembered(tgtSA.getSplicedCards());
-                }
+            if (sa.hasParam("RememberSplicedOntoCounteredSpell") && tgtSA.getSplicedCards() != null) {
+                sa.getHostCard().addRemembered(tgtSA.getSplicedCards());
             }
 
             if (!removeFromStack(tgtSA, sa, si, params)) {
@@ -106,6 +106,9 @@ public class CounterEffect extends SpellAbilityEffect {
 
             if (sa.hasParam("RememberCountered")) {
                 sa.getHostCard().addRemembered(tgtSACard);
+            }
+            if (sa.hasParam("RememberCounteredSA")) {
+                sa.getHostCard().addRemembered(tgtSA);
             }
         }
         zoneMovements.triggerChangesZoneAll(game, sa);
@@ -244,7 +247,7 @@ public class CounterEffect extends SpellAbilityEffect {
         Card movedCard = null;
         final Card c = tgtSA.getHostCard();
 
-        final Map<AbilityKey, Object> repParams = AbilityKey.mapFromAffected(tgtSA.getHostCard());
+        final Map<AbilityKey, Object> repParams = AbilityKey.mapFromAffected(c);
         repParams.put(AbilityKey.Cause, srcSA);
         repParams.put(AbilityKey.SpellAbility, tgtSA);
         if (game.getReplacementHandler().run(ReplacementType.Counter, repParams) != ReplacementResult.NotReplaced) {
@@ -257,10 +260,10 @@ public class CounterEffect extends SpellAbilityEffect {
 
         params.put(AbilityKey.StackSa, tgtSA);
 
-        String destination =  srcSA.hasParam("Destination") ? srcSA.getParam("Destination") : tgtSA.isAftermath() ? "Exile" : "Graveyard";
+        String destination = srcSA.getParamOrDefault("Destination", "Graveyard");
         if (srcSA.hasParam("DestinationChoice")) { //Hinder
             List<String> pos = Arrays.asList(srcSA.getParam("DestinationChoice").split(","));
-            destination = srcSA.getActivatingPlayer().getController().chooseSomeType(Localizer.getInstance().getMessage("lblRemoveDestination"), tgtSA, pos, null);
+            destination = srcSA.getActivatingPlayer().getController().chooseSomeType(Localizer.getInstance().getMessage("lblRemoveDestination"), tgtSA, pos);
         }
         if (tgtSA.isAbility()) {
             // For Ability-targeted counterspells - do not move it anywhere,
@@ -279,20 +282,12 @@ public class CounterEffect extends SpellAbilityEffect {
             c.setCastSA(null);
             c.setCastFrom(null);
             c.forceTurnFaceUp();
-            if (tgtSA instanceof SpellPermanent) {
-                c.setController(srcSA.getActivatingPlayer(), 0);
-                movedCard = game.getAction().moveToPlay(c, srcSA.getActivatingPlayer(), srcSA, params);
-            } else {
-                movedCard = game.getAction().moveToPlay(c, srcSA.getActivatingPlayer(), srcSA, params);
-                movedCard.setController(srcSA.getActivatingPlayer(), 0);
-            }
+            c.setController(srcSA.getActivatingPlayer(), game.getNextTimestamp());
+            movedCard = game.getAction().moveToPlay(c, srcSA.getActivatingPlayer(), srcSA, params);
         } else if (destination.equals("TopOfLibrary")) {
             movedCard = game.getAction().moveToLibrary(c, srcSA, params);
         } else if (destination.equals("BottomOfLibrary")) {
             movedCard = game.getAction().moveToBottomOfLibrary(c, srcSA, params);
-        } else if (destination.equals("ShuffleIntoLibrary")) {
-            movedCard = game.getAction().moveToBottomOfLibrary(c, srcSA, params);
-            c.getController().shuffle(srcSA);
         } else {
             throw new IllegalArgumentException("AbilityFactory_CounterMagic: Invalid Destination argument for card "
                     + srcSA.getHostCard().getName());

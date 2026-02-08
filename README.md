@@ -1,4 +1,4 @@
-# ⚔️ Forge: The Magic: The Gathering Rules Engine
+# ⚔️  Forge: The Magic: The Gathering Rules Engine
 
 Join the **Forge community** on [Discord](https://discord.gg/HcPJNyD66a)!
 
@@ -26,13 +26,14 @@ Join the **Forge community** on [Discord](https://discord.gg/HcPJNyD66a)!
 
 ### 📥 Desktop Installation
 1. **Latest Releases:** Download the latest version [here](https://github.com/Card-Forge/forge/releases/latest).
-2. **Snapshot Build:** For the latest development version, grab the `forge-gui-desktop` tarball from our [Snapshot Build](https://downloads.cardforge.org/dailysnapshots/).
+2. **Snapshot Build:** For the latest development version, grab the `forge-gui-desktop` tarball from our [Snapshot Build](https://github.com/Card-Forge/forge/releases/tag/daily-snapshots).
    - **Tip:** Extract to a new folder to prevent version conflicts.
 3. **User Data Management:** Previous players’ data is preserved during upgrades.
 4. **Java Requirement:** Ensure you have **Java 17 or later** installed.
 
 ### 📱 Android Installation
-- Download the **APK** from the [Snapshot Build](https://downloads.cardforge.org/dailysnapshots/). On the first launch, Forge will automatically download all necessary assets.
+- _(Note: **Android 11** is the minimum requirement with at least **6GB RAM** to run smoothly. You need to enable **"Install unknown apps"** for Forge to initialize and update itself)_
+- Download the **APK** from the [Snapshot Build](https://github.com/Card-Forge/forge/releases/tag/daily-snapshots). On the first launch, Forge will automatically download all necessary assets.
 
 ---
 
@@ -46,10 +47,12 @@ Embark on a thrilling single-player journey where you can:
 - Challenge diverse AI opponents.
 - Collect cards and items to boost your abilities.
 
-![Adventure Mode](https://downloads.cardforge.org/images/site/adventure-mode.png "Adventure Mode")
+<img width="1282" height="752" alt="Shandalar World" src="https://github.com/user-attachments/assets/9af31471-d688-442f-9418-9807d8635b72" />
 
 ### 🔍 Quest Modes
 Engage in focused gameplay without the overworld exploration—perfect for quick sessions!
+
+<img width="1282" height="752" alt="Quest Duels" src="https://github.com/user-attachments/assets/b9613b1c-e8c3-4320-8044-6922c519aad4" />
 
 ### 🤖 AI Formats
 Test your skills against AI in multiple formats:
@@ -58,7 +61,9 @@ Test your skills against AI in multiple formats:
 - **Commander**
 - **Cube**
 
-For comprehensive gameplay instructions, visit our [Gameplay Guide](https://github.com/Card-Forge/forge/wiki/Gameplay-Guide).
+For comprehensive gameplay instructions, visit our [User Guide](https://github.com/Card-Forge/forge/wiki/User-Guide).
+
+<img width="1282" height="752" alt="Sealed" src="https://github.com/user-attachments/assets/ae603dbd-4421-4753-a333-87cb0a28d772" />
 
 ---
 

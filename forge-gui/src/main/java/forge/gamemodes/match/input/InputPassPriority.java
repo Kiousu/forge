@@ -17,15 +17,10 @@
  */
 package forge.gamemodes.match.input;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.player.Player;
-import forge.game.player.PlayerController;
 import forge.game.player.actions.PassPriorityAction;
-
 import forge.game.spellability.SpellAbility;
 import forge.localinstance.properties.ForgePreferences.FPref;
 import forge.model.FModel;
@@ -34,6 +29,9 @@ import forge.player.PlayerControllerHuman;
 import forge.util.ITriggerEvent;
 import forge.util.Localizer;
 import forge.util.ThreadUtil;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * <p>
@@ -123,16 +121,9 @@ public class InputPassPriority extends InputSyncronizedBase {
     public List<SpellAbility> getChosenSa() { return chosenSa; }
 
     @Override
-    protected final void onPlayerSelected(Player selected, final ITriggerEvent triggerEvent) {
-        PlayerController pc = selected.getController();
-        if (pc.isGuiPlayer()) {
-           pc.setFullControl(!pc.isFullControl());
-        }
-    }
-
-    @Override
     protected boolean onCardSelected(final Card card, final List<Card> otherCardsToSelect, final ITriggerEvent triggerEvent) {
-        //remove unplayable unless triggerEvent specified, in which case unplayable may be shown as disabled options
+        // remove unplayable unless triggerEvent specified, in which case unplayable may be shown as disabled options
+        // (so shortcuts are constant regardless of game state)
         List<SpellAbility> abilities = card.getAllPossibleAbilities(getController().getPlayer(), triggerEvent == null); 
         if (abilities.isEmpty()) {
             return false;

@@ -1,12 +1,6 @@
 package forge.gamemodes.match.input;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 import com.google.common.collect.Maps;
-
 import forge.card.ColorSet;
 import forge.card.mana.ManaCost;
 import forge.card.mana.ManaCostShard;
@@ -21,6 +15,11 @@ import forge.player.PlayerControllerHuman;
 import forge.util.ITriggerEvent;
 import forge.util.TextUtil;
 
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 
 public final class InputSelectCardsForConvokeOrImprovise extends InputSelectManyBase<Card> {
     private static final long serialVersionUID = -1779224307654698954L;
@@ -28,18 +27,33 @@ public final class InputSelectCardsForConvokeOrImprovise extends InputSelectMany
     private final ManaCostBeingPaid remainingCost;
     private final Player player;
     private final CardCollectionView availableCards;
-    private final boolean improvise;
+    private final boolean artifacts;
+    private final boolean creatures;
+    private final Integer maxSelectable;
     private final String cardType;
     private final String description;
 
-    public InputSelectCardsForConvokeOrImprovise(final PlayerControllerHuman controller, final Player p, final ManaCost cost, final CardCollectionView untapped, boolean impr, final SpellAbility sa) {
+    public InputSelectCardsForConvokeOrImprovise(final PlayerControllerHuman controller, final Player p, final SpellAbility sa, final ManaCost cost, final CardCollectionView untapped, boolean artifacts, boolean creatures, Integer maxReduction) {
         super(controller, 0, Math.min(cost.getCMC(), untapped.size()), sa);
         remainingCost = new ManaCostBeingPaid(cost);
         player = p;
         availableCards = untapped;
-        improvise = impr;
-        cardType = impr ? "artifact" : "creature";
-        description = impr ? "Improvise" : "Convoke";
+        this.artifacts = artifacts;
+        this.creatures = creatures;
+        this.maxSelectable = maxReduction;
+
+        if (artifacts && creatures) {
+            cardType = "artifact or creature";
+            description = "Waterbend";
+        } else if (!artifacts && !creatures) {
+            throw new IllegalArgumentException("At least one of artifacts or creatures must be true");
+        } else if (creatures) {
+            cardType = "creature";
+            description = "Convoke";
+        } else {
+            cardType = "artifact";
+            description = "Improvise";
+        }
     }
 
     @Override
@@ -50,6 +64,10 @@ public final class InputSelectCardsForConvokeOrImprovise extends InputSelectMany
             sb.append(sa.getStackDescription()).append("\n");
         }
         sb.append(TextUtil.concatNoSpace("Choose ", cardType, " to tap for ", description, ".\nRemaining mana cost is ", remainingCost.toString()));
+
+        if (maxSelectable != null) {
+            sb.append(". You may select up to ").append(chosenCards.size() - maxSelectable).append(" more ").append(cardType).append("(s).");
+        }
         return sb.toString();
     }
 
@@ -67,10 +85,17 @@ public final class InputSelectCardsForConvokeOrImprovise extends InputSelectMany
             onSelectStateChanged(card, false);
         }
         else {
+            if (maxSelectable != null && chosenCards.size() >= maxSelectable) {
+                // Should show a different message if there's a max selectable
+                return false;
+            }
+
             byte chosenColor;
-            if (improvise) {
+            if (artifacts) {
+                // Waterbend/Improvise can be paid with colorless mana from artifacts
                 chosenColor = ManaCostShard.COLORLESS.getColorMask();
             } else {
+                // Convoke can pay color or generic mana cost from creatures
                 ColorSet colors = card.getColor();
                 if (colors.isMulticolor()) {
                     //if card is multicolor, strip out any colors which can't be paid towards remaining cost
@@ -106,10 +131,6 @@ public final class InputSelectCardsForConvokeOrImprovise extends InputSelectMany
             return TextUtil.concatNoSpace("tap ", cardType, " for ", description);
         }
         return null;
-    }
-
-    @Override
-    protected void onPlayerSelected(final Player player, final ITriggerEvent triggerEvent) {
     }
 
     public Map<Card, ManaCostShard> getConvokeMap() {

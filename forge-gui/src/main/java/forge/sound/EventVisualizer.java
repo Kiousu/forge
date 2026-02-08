@@ -1,8 +1,5 @@
 package forge.sound;
 
-import java.io.File;
-import java.util.Collection;
-
 import forge.LobbyPlayer;
 import forge.game.card.Card;
 import forge.game.event.*;
@@ -15,6 +12,8 @@ import forge.gui.events.UiEventBlockerAssigned;
 import forge.gui.events.UiEventNextGameDecision;
 import forge.util.TextUtil;
 import forge.util.maps.MapOfLists;
+
+import java.util.Collection;
 
 /**
  * This class is in charge of converting any forge.game.event.Event to a SoundEffectType.
@@ -40,8 +39,8 @@ public class EventVisualizer extends IGameEventVisitor.Base<SoundEffectType> imp
     public SoundEffectType visit(final GameEventCardAttachment event) { return SoundEffectType.Equip; }
     @Override
     public SoundEffectType visit(final GameEventCardChangeZone event) {
-        final ZoneType from = event.from == null ? null : event.from.getZoneType();
-        final ZoneType to = event.to.getZoneType();
+        final ZoneType from = event.from() == null ? null : event.from().getZoneType();
+        final ZoneType to = event.to().getZoneType();
         if( from == ZoneType.Library && to == ZoneType.Hand) {
             return SoundEffectType.Draw;
         }
@@ -54,7 +53,7 @@ public class EventVisualizer extends IGameEventVisitor.Base<SoundEffectType> imp
 
     @Override
     public SoundEffectType visit(GameEventCardStatsChanged event) {
-        return event.transform ? SoundEffectType.FlipCard : null ;
+        return event.transform() ? SoundEffectType.FlipCard : null ;
     }
 
     @Override
@@ -62,7 +61,7 @@ public class EventVisualizer extends IGameEventVisitor.Base<SoundEffectType> imp
     @Override
     public SoundEffectType visit(final GameEventCardSacrificed event) { return SoundEffectType.Sacrifice; }
     @Override
-    public SoundEffectType visit(final GameEventCardCounters event) { return event.newValue > event.oldValue ? SoundEffectType.AddCounter : event.newValue < event.oldValue ? SoundEffectType.RemoveCounter : null; }
+    public SoundEffectType visit(final GameEventCardCounters event) { return event.newValue() > event.oldValue() ? SoundEffectType.AddCounter : event.newValue() < event.oldValue() ? SoundEffectType.RemoveCounter : null; }
     @Override
     public SoundEffectType visit(final GameEventTurnEnded event) { return SoundEffectType.EndOfTurn; }
     @Override
@@ -70,7 +69,7 @@ public class EventVisualizer extends IGameEventVisitor.Base<SoundEffectType> imp
     @Override
     public SoundEffectType visit(final GameEventRollDie event) { return SoundEffectType.RollDie; }
     @Override
-    public SoundEffectType visit(final GameEventPlayerLivesChanged event) { return event.newLives < event.oldLives ? SoundEffectType.LifeLoss : SoundEffectType.LifeGain; }
+    public SoundEffectType visit(final GameEventPlayerLivesChanged event) { return event.newLives() < event.oldLives() ? SoundEffectType.LifeLoss : SoundEffectType.LifeGain; }
     @Override
     public SoundEffectType visit(final GameEventPlayerShardsChanged event) { return SoundEffectType.TakeShard; }
     @Override
@@ -80,19 +79,27 @@ public class EventVisualizer extends IGameEventVisitor.Base<SoundEffectType> imp
     @Override
     public SoundEffectType visit(final GameEventShuffle event) { return SoundEffectType.Shuffle; }
     @Override
+    public SoundEffectType visit(final GameEventSpeedChanged event) { return event.newValue() > event.oldValue() ? SoundEffectType.SpeedUp : null; }
+    @Override
     public SoundEffectType visit(final GameEventTokenCreated event) { return SoundEffectType.Token; }
     @Override
+    public SoundEffectType visit(final GameEventSprocketUpdate event) {
+        if(event.oldSprocket() == event.sprocket() || event.sprocket() <= 0)
+            return null;
+        return SoundEffectType.Sprocket;
+    }
+    @Override
     public SoundEffectType visit(final GameEventDayTimeChanged event) {
-        return event.daytime ? SoundEffectType.Daytime : SoundEffectType.Nighttime;
+        return event.daytime() ? SoundEffectType.Daytime : SoundEffectType.Nighttime;
     }
     @Override
     public SoundEffectType visit(final GameEventBlockersDeclared event) {
-        final boolean isLocalHuman = event.defendingPlayer.getLobbyPlayer() == player;
+        final boolean isLocalHuman = event.defendingPlayer().getLobbyPlayer().equals(player);
         if (isLocalHuman) {
             return null; // already played sounds in interactive mode
         }
 
-        for (final MapOfLists<Card, Card> ab : event.blockers.values()) {
+        for (final MapOfLists<Card, Card> ab : event.blockers().values()) {
             for(final Collection<Card> bb : ab.values()) {
                 if ( !bb.isEmpty() ) {
                     // hasAnyBlocker = true;
@@ -108,7 +115,7 @@ public class EventVisualizer extends IGameEventVisitor.Base<SoundEffectType> imp
      */
     @Override
     public SoundEffectType visit(final GameEventGameOutcome event) {
-        final boolean humanWonTheDuel = event.result.getWinningLobbyPlayer() == player;
+        final boolean humanWonTheDuel = event.result().getWinningLobbyPlayer().equals(player);
         return humanWonTheDuel ? SoundEffectType.WinDuel : SoundEffectType.LoseDuel;
     }
 
@@ -118,12 +125,12 @@ public class EventVisualizer extends IGameEventVisitor.Base<SoundEffectType> imp
      */
     @Override
     public SoundEffectType visit(final GameEventSpellResolved evt) {
-        if (evt.spell == null ) {
+        if (evt.spell() == null ) {
             return null;
         }
 
-        final Card source = evt.spell.getHostCard();
-        if (evt.spell.isSpell()) {
+        final Card source = evt.spell().getHostCard();
+        if (evt.spell().isSpell()) {
             // if there's a specific effect for this particular card, play it and
             // we're done.
             if (hasSpecificCardEffect(source)) {
@@ -153,19 +160,19 @@ public class EventVisualizer extends IGameEventVisitor.Base<SoundEffectType> imp
      * Plays the sound corresponding to the change of the card's tapped state
      * (when a card is tapped or untapped).
      *
-     * @param tapped_state if true, the "tap" sound is played; otherwise, the
+     * @param event if true, the "tap" sound is played; otherwise, the
      * "untap" sound is played
      * @return the sound effect type
      */
     @Override
     public SoundEffectType visit(final GameEventCardTapped event) {
-        return event.tapped ? SoundEffectType.Tap : SoundEffectType.Untap;
+        return event.tapped() ? SoundEffectType.Tap : SoundEffectType.Untap;
     }
 
     /**
      * Plays the sound corresponding to the land type when the land is played.
      *
-     * @param land the land card that was played
+     * @param event the land card that was played
      * @return the sound effect type
      */
     @Override
@@ -177,9 +184,9 @@ public class EventVisualizer extends IGameEventVisitor.Base<SoundEffectType> imp
 
     @Override
     public SoundEffectType visit(GameEventZone event) {
-        Card card = event.card;
-        ZoneType zoneTo = event.zoneType;
-        EventValueChangeType zoneEventMode = event.mode;
+        Card card = event.card();
+        ZoneType zoneTo = event.zoneType();
+        EventValueChangeType zoneEventMode = event.mode();
         SoundEffectType resultSound = null;
         if(zoneEventMode == EventValueChangeType.Added && zoneTo == ZoneType.Battlefield) {
             if(card.isLand()) {
@@ -306,13 +313,13 @@ public class EventVisualizer extends IGameEventVisitor.Base<SoundEffectType> imp
             } else {
                 effect = TextUtil.fastReplace(TextUtil.fastReplace(
                         TextUtil.fastReplace(c.getName(), ",", ""),
-                        " ", "_"), "'", "").toLowerCase() + ".mp3";
+                        " ", "_"), "'", "").toLowerCase();
 
             }
         }
 
         // Only proceed if the file actually exists
-        return new File(SoundSystem.instance.getSoundDirectory(), effect).exists();
+        return SoundSystem.instance.getSoundResource(effect) != null;
     }
 
 
@@ -327,12 +334,11 @@ public class EventVisualizer extends IGameEventVisitor.Base<SoundEffectType> imp
     public String getScriptedSoundEffectName(final GameEvent evt) {
         Card c = null;
 
-        if (evt instanceof GameEventSpellResolved) {
-            c = ((GameEventSpellResolved) evt).spell.getHostCard();
-        } else if (evt instanceof GameEventZone) {
-            GameEventZone evZone = (GameEventZone)evt;
-            if (evZone.zoneType == ZoneType.Battlefield && evZone.mode == EventValueChangeType.Added && evZone.card.isLand()) {
-                c = evZone.card; // assuming a land is played or otherwise put on the battlefield
+        if (evt instanceof GameEventSpellResolved evSpell) {
+            c = evSpell.spell().getHostCard();
+        } else if (evt instanceof GameEventZone evZone) {
+            if (evZone.zoneType() == ZoneType.Battlefield && evZone.mode() == EventValueChangeType.Added && evZone.card().isLand()) {
+                c = evZone.card(); // assuming a land is played or otherwise put on the battlefield
             }
         }
 
@@ -344,7 +350,7 @@ public class EventVisualizer extends IGameEventVisitor.Base<SoundEffectType> imp
             } else {
                 return TextUtil.fastReplace(TextUtil.fastReplace(
                         TextUtil.fastReplace(c.getName(), ",", ""),
-                        " ", "_"), "'", "").toLowerCase() + ".mp3";
+                        " ", "_"), "'", "").toLowerCase();
             }
         }
     }
@@ -352,7 +358,7 @@ public class EventVisualizer extends IGameEventVisitor.Base<SoundEffectType> imp
 
     @Override
     public SoundEffectType visit(final UiEventBlockerAssigned event) {
-        return event.attackerBeingBlocked == null ? null : SoundEffectType.Block;
+        return event.attackerBeingBlocked() == null ? null : SoundEffectType.Block;
     }
     @Override
     public SoundEffectType visit(final UiEventAttackerDeclared event) {
@@ -365,5 +371,13 @@ public class EventVisualizer extends IGameEventVisitor.Base<SoundEffectType> imp
     @Override
     public SoundEffectType visit(final GameEventCardPhased event) {
         return SoundEffectType.Phasing;
+    }
+
+    @Override
+    public SoundEffectType visit(final GameEventSnapshotRestored gameEventSnapshotRestored) {
+        SoundSystem.instance.setIgnorePlayRequests(gameEventSnapshotRestored.start());
+
+        // How often do people cancel/undo is a rewind noise too repetitive?
+        return SoundEffectType.SnapshotRestored;
     }
 }

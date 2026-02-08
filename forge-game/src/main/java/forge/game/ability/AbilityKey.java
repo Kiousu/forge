@@ -18,7 +18,6 @@ public enum AbilityKey {
     Affected("Affected"),
     AllVotes("AllVotes"),
     Amount("Amount"),
-    Attach("Attach"),
     AttachSource("AttachSource"),
     AttachTarget("AttachTarget"),
     Attacked("Attacked"),
@@ -38,7 +37,6 @@ public enum AbilityKey {
     Causer("Causer"),
     Championed("Championed"),
     ClassLevel("ClassLevel"),
-    Cost("Cost"),
     CostStack("CostStack"),
     CounterAmount("CounterAmount"),
     CounteredSA("CounteredSA"),
@@ -62,6 +60,7 @@ public enum AbilityKey {
     DefendingPlayer("DefendingPlayer"),
     Destination("Destination"),
     Devoured("Devoured"),
+    DicePTExchanges("DicePTExchanges"),
     Discard("Discard"),
     DiscardedBefore("DiscardedBefore"),
     DividedShieldAmount("DividedShieldAmount"),
@@ -72,7 +71,6 @@ public enum AbilityKey {
     Explored("Explored"),
     Explorer("Explorer"),
     ExtraTurn("ExtraTurn"),
-    Event("Event"),
     ETB("ETB"),
     Fighter("Fighter"),
     Fighters("Fighters"),
@@ -94,8 +92,8 @@ public enum AbilityKey {
     Mana("Mana"),
     MergedCards("MergedCards"),
     Mode("Mode"),
-    Modifier("Modifier"),
     MonstrosityAmount("MonstrosityAmount"),
+    NaturalResult("NaturalResult"),
     NewCard("NewCard"),
     NewCounterAmount("NewCounterAmount"),
     NoPreventDamage("NoPreventDamage"),
@@ -131,7 +129,6 @@ public enum AbilityKey {
     SourceSA("SourceSA"),
     SpellAbility("SpellAbility"),
     SpellAbilityTargets("SpellAbilityTargets"),
-    StackInstance("StackInstance"),
     StackSa("StackSa"),
     SurveilNum("SurveilNum"),
     Target("Target"),
@@ -139,10 +136,9 @@ public enum AbilityKey {
     Token("Token"),
     TokenNum("TokenNum"),
     Valiant("Valiant"),
-    Vehicle("Vehicle"),
     Won("Won"),
 
-    // below used across different Replacements, don't reuse
+    // below shared across different Replacements, don't reuse
     InternalTriggerTable("InternalTriggerTable"),
     SimultaneousETB("SimultaneousETB"); // for CR 614.13c
 

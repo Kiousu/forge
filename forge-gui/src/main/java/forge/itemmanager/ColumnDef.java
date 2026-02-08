@@ -17,8 +17,6 @@
  */
 package forge.itemmanager;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Iterables;
 import forge.card.*;
 import forge.card.mana.ManaCost;
 import forge.deck.DeckProxy;
@@ -32,9 +30,7 @@ import forge.item.InventoryItemFromSet;
 import forge.item.PaperCard;
 import forge.itemmanager.ItemColumnConfig.SortState;
 import forge.model.FModel;
-import forge.util.CardTranslation;
-import forge.util.Localizer;
-import forge.util.TextUtil;
+import forge.util.*;
 
 import org.apache.commons.lang3.StringUtils;
 
@@ -43,6 +39,7 @@ import java.math.RoundingMode;
 import java.util.HashSet;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.function.Function;
 
 public enum ColumnDef {
     /**
@@ -57,16 +54,16 @@ public enum ColumnDef {
     NAME("lblName", "lblName", 180, false, SortState.ASC,
             from -> {
                 if (from.getKey() instanceof PaperCard) {
-                    String spire = ((PaperCard) from.getKey()).getColorID() == null ? "" : ((PaperCard) from.getKey()).getColorID().toString();
+                    String spire = ((PaperCard) from.getKey()).getMarkedColors() == null ? "" : ((PaperCard) from.getKey()).getMarkedColors().toString();
                     String sortableName = ((PaperCard)from.getKey()).getSortableName();
-                    return sortableName == null ? TextUtil.toSortableName(from.getKey().getName() + spire) : sortableName + spire;
+                    return sortableName == null ? TextUtil.toSortableName(from.getKey().getDisplayName() + spire) : sortableName + spire;
                 }
-                return TextUtil.toSortableName(from.getKey().getName());
+                return TextUtil.toSortableName(from.getKey().getDisplayName());
             },
             from -> {
                 if (from.getKey() instanceof PaperCard)
-                    return from.getKey().toString();
-                return from.getKey().getName();
+                    return CardTranslation.getTranslatedName(from.getKey().getDisplayName());
+                return from.getKey().getDisplayName();
             }),
 
     /**
@@ -94,7 +91,7 @@ public enum ColumnDef {
      * The color column.
      */
     COLOR("lblColor", "ttColor", 46, true, SortState.ASC,
-            from -> toColor(from.getKey()),
+            from -> toColor(from.getKey()).getOrderWeight(),
             from -> toColor(from.getKey())),
     /**
      * The power column.
@@ -191,7 +188,7 @@ public enum ColumnDef {
                         sanctioned.add(gf);
                     }
                 }
-                return StringUtils.join(Iterables.transform(sanctioned, GameFormat::getName), ", ");
+                return StringUtils.join(IterableUtil.transform(sanctioned, GameFormat::getName), ", ");
             }),
     /**
      * The Draft ranking column.
@@ -240,7 +237,12 @@ public enum ColumnDef {
                 }
                 return CardPreferences.getPrefs(card).getStarCount();
             },
-            from -> toCard(from.getKey())),
+            from -> {
+                IPaperCard card = toCard(from.getKey());
+                if (card == null)
+                    return 0;
+                return CardPreferences.getPrefs(card).getStarCount();
+            }),
     /**
      * The favorite deck flag column.
      */
@@ -269,7 +271,7 @@ public enum ColumnDef {
      * The deck color column.
      */
     DECK_COLOR("lblColor", "ttColor", 70, true, SortState.ASC,
-            from -> toDeckColor(from.getKey()),
+            from -> toDeckColor(from.getKey()).getOrderWeight(),
             from -> toDeckColor(from.getKey())),
     /**
      * The deck format column.
@@ -375,7 +377,7 @@ public enum ColumnDef {
     }
 
     private static ColorSet toColor(final InventoryItem i) {
-        return i instanceof IPaperCard ? ((IPaperCard) i).getRules().getColor() : ColorSet.getNullColor();
+        return i instanceof IPaperCard ? ((IPaperCard) i).getRules().getColor() : ColorSet.C;
     }
 
     private static Integer toPower(final InventoryItem i) {

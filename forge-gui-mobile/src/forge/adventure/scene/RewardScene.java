@@ -69,7 +69,6 @@ public class RewardScene extends UIScene {
     private int remainingSelections = 0;
 
     private RewardScene() {
-
         super(Forge.isLandscapeMode() ? "ui/items.json" : "ui/items_portrait.json");
 
         playerGold = Controls.newAccountingLabel(ui.findActor("playerGold"), false);
@@ -103,7 +102,6 @@ public class RewardScene extends UIScene {
     }
 
     private void toggleToolTip() {
-
         Selectable selectable = getSelected();
         if (selectable == null)
             return;
@@ -159,18 +157,14 @@ public class RewardScene extends UIScene {
     boolean done(boolean skipShowLoot) {
         GameHUD.getInstance().getTouchpad().setVisible(false);
         if (!skipShowLoot) {
-            doneButton.setText("[+OK]");
             showLootOrDone();
             return true;
         }
         if (type != null) {
             switch (type) {
                 case Shop:
-                    doneButton.setText("[+OK]");
-                    break;
                 case QuestReward:
                 case Loot:
-                    doneButton.setText("[+OK]");
                     break;
             }
         }
@@ -189,7 +183,7 @@ public class RewardScene extends UIScene {
             if (type == Type.Loot)
                 AdventurePlayer.current().addReward(reward.getReward());
             if (type == Type.QuestReward)
-                AdventurePlayer.current().addReward(reward.getReward()); // Want to customize this soon to have selectable rewards which will be handled different here
+                AdventurePlayer.current().addReward(reward.getReward()); // TODO Want to customize this soon to have selectable rewards which will be handled different here
             reward.clearHoldToolTip();
             try {
                 stage.getActors().removeValue(reward, true);
@@ -217,7 +211,6 @@ public class RewardScene extends UIScene {
     @Override
     public void enter() {
         autoSell = false;
-        doneButton.setText("[+OK]");
         updateDetailButton();
         super.enter();
     }
@@ -252,7 +245,7 @@ public class RewardScene extends UIScene {
                             reward.flip();
                         }
                     }, delay);
-                    delay += 0.15f;
+                    delay += 0.12f;
                 }
             }
         } else {
@@ -300,7 +293,7 @@ public class RewardScene extends UIScene {
 
     public void loadRewards(Deck deck, Type type, ShopActor shopActor, boolean noSell) {
         Array<Reward> rewards = new Array<>();
-        for (PaperCard card : deck.getAllCardsInASinglePool().toFlatList()) {
+        for (PaperCard card : deck.getAllCardsInASinglePool(true, true).toFlatList()) {
             rewards.add(new Reward(card, noSell));
         }
         loadRewards(rewards, type, shopActor);
@@ -325,6 +318,34 @@ public class RewardScene extends UIScene {
     }
 
     public void loadRewards(Array<Reward> newRewards, Type type, ShopActor shopActor) {
+        // Merge Gold and Shards rewards into single entries
+        int totalGold = 0;
+        int totalShards = 0;
+        Array<Reward> others = new Array<>();
+        for (Reward r : new Array.ArrayIterator<>(newRewards)) {
+            switch (r.getType()) {
+                case Gold:
+                    totalGold += r.getCount();
+                    break;
+                case Shards:
+                    totalShards += r.getCount();
+                    break;
+                default:
+                    others.add(r);
+                    break;
+            }
+        }
+        newRewards.clear();
+        if (totalGold > 0) {
+            newRewards.add(new Reward(Reward.Type.Gold, totalGold));
+        }
+        if (totalShards > 0) {
+            newRewards.add(new Reward(Reward.Type.Shards, totalShards));
+        }
+        for (Reward r : others) {
+            newRewards.add(r);
+        }
+
         headerLabel.clearListeners();
         // Sort the rewards based on the rarity of the card inside the reward/ lets give items rarity
         newRewards.sort(Comparator.comparing(reward -> {
@@ -342,6 +363,8 @@ public class RewardScene extends UIScene {
             this.shopActor = shopActor;
             this.changes = shopActor.getMapStage().getChanges();
             addToSelectable(restockButton);
+        } else {
+            doneButton.setText("[+OK]");
         }
         for (Actor actor : new Array.ArrayIterator<>(generated)) {
             actor.remove();
@@ -358,7 +381,7 @@ public class RewardScene extends UIScene {
         headerLabel.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                if (type == Type.Loot) {
+                if (type == Type.Loot || type == Type.QuestReward) {
                     autoSell = !autoSell;
                     String cb = autoSell ? "\u2611 " : "\u2610 ";
                     headerLabel.setText("[%?SHINY][;]" + cb + Forge.getLocalizer().getMessage("lblAll"));
@@ -406,7 +429,6 @@ public class RewardScene extends UIScene {
 
         switch (type) {
             case Shop:
-                doneButton.setText("[+OK]");
                 String shopName = shopActor.getDescription();
                 if ((shopName != null && !shopName.isEmpty())) {
                     headerLabel.setVisible(true);
@@ -422,22 +444,15 @@ public class RewardScene extends UIScene {
                 }
                 break;
             case QuestReward:
-                headerLabel.setVisible(false);
-                headerLabel.setText("");
-                restockButton.setVisible(false);
-                doneButton.setText("[+OK]");
-                break;
             case Loot:
-                headerLabel.skipToTheEnd();
                 headerLabel.setPosition(restockButton.getX(), restockButton.getY());
                 headerLabel.setVisible(true);
                 headerLabel.setText("[%?SHINY][;]\u2610 " + Forge.getLocalizer().getMessage("lblAll"));
+                headerLabel.skipToTheEnd();
                 restockButton.setVisible(false);
-                doneButton.setText("[+OK]");
                 break;
             case RewardChoice:
                 restockButton.setVisible(false);
-                doneButton.setText("[+OK]");
                 headerLabel.setVisible(remainingSelections > 0);
                 headerLabel.setText(Forge.getLocalizer().getMessage("lblSelectRewards", remainingSelections));
                 doneButton.setDisabled(remainingSelections > 0);
@@ -476,7 +491,9 @@ public class RewardScene extends UIScene {
                 mul *= 0.8f;
         }
         cardHeight = bestCardHeight * 0.90f;
-        Float custom = Forge.isLandscapeMode() ? Config.instance().getSettingData().rewardCardAdjLandscape : Config.instance().getSettingData().rewardCardAdj;
+        Float custom = Forge.isLandscapeMode()
+            ? Config.instance().getSettingData().rewardCardAdjLandscape
+            : Config.instance().getSettingData().rewardCardAdj;
         if (custom != null && custom != 1f) {
             mul *= custom;
         } else {
@@ -490,7 +507,6 @@ public class RewardScene extends UIScene {
                     mul *= Forge.isLandscapeMode() ? 1.05f : 1.5f;
                 else if (fW / fH >= 2f)
                     mul *= Forge.isLandscapeMode() ? 1f : 1.4f;
-
             }
         }
         cardWidth = (cardHeight / CARD_WIDTH_TO_HEIGHT) * mul;
@@ -507,7 +523,6 @@ public class RewardScene extends UIScene {
                     skipCard = true;
                 }
             }
-
 
             int currentRow = (i / numberOfColumns);
             float lastRowXAdjust = 0;
@@ -552,7 +567,6 @@ public class RewardScene extends UIScene {
             updateRestockButton();
         }
     }
-
 
     private void updateBuyButtons() {
         for (Actor actor : new Array.ArrayIterator<>(generated)) {
@@ -642,7 +656,6 @@ public class RewardScene extends UIScene {
         private final int index;
         public RewardActor rewardActor;
         private Reward reward;
-        int price;
         boolean isSold;
 
         void update() {
@@ -661,7 +674,6 @@ public class RewardScene extends UIScene {
             else if (Reward.Type.Item.equals(reward.getType()))
                 setText("Pick Reward" + "\n" + Forge.getLocalizer().getMessage("lblOwned") + ": " + AdventurePlayer.current().countItem(reward.getItem().name));
         }
-
 
         public ChooseRewardButton(int i, RewardActor actor, Reward reward, TextraButton style) {
             super("", style.getStyle(), Controls.getTextraFont());

@@ -17,20 +17,15 @@
  */
 package forge.util;
 
-import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.concurrent.ConcurrentHashMap;
-
-import com.google.common.base.Predicate;
-
 import com.google.common.collect.Maps;
 import forge.item.InventoryItem;
+
+import java.io.Serializable;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.*;
+import java.util.stream.Collector;
 
 /**
  * <p>
@@ -75,6 +70,37 @@ public class ItemPool<T extends InventoryItem> implements Iterable<Entry<T, Inte
         return result;
     }
 
+    public static <T extends InventoryItem> Collector<T, ?, ItemPool<T>> collector(Class<T> cls) {
+        return new Collector<T, ItemPool<T>, ItemPool<T>>() {
+            @Override
+            public Supplier<ItemPool<T>> supplier() {
+                return () -> new ItemPool<T>(cls);
+            }
+
+            @Override
+            public BiConsumer<ItemPool<T>, T> accumulator() {
+                return (pool, item) -> {
+                    if (cls.isInstance(item)) pool.add(cls.cast(item), 1);
+                };
+            }
+
+            @Override
+            public BinaryOperator<ItemPool<T>> combiner() {
+                return (first, second) -> {
+                    first.addAll(second);
+                    return first;
+                };
+            }
+
+            @Override public Function<ItemPool<T>, ItemPool<T>> finisher() {
+                return Function.identity();
+            }
+            @Override public Set<Characteristics> characteristics() {
+                return EnumSet.of(Characteristics.IDENTITY_FINISH);
+            }
+        };
+    }
+
     protected ItemPool(final Map<T, Integer> items0, final Class<T> cls) {
         if (items0 != null) {
             items = items0;
@@ -117,16 +143,16 @@ public class ItemPool<T extends InventoryItem> implements Iterable<Entry<T, Inte
 
     public int countAll(Predicate<T> condition){
         int count = 0;
-        for (Integer v : Maps.filterKeys(this.items, condition).values())
+        for (Integer v : Maps.filterKeys(this.items, condition::test).values())
             count += v;
         return count;
 
     }
 
     @SuppressWarnings("unchecked")
-    public final <U extends InventoryItem> int countAll(Predicate<U> condition, Class<U> cls) {
+    public final <U extends InventoryItem> int countAll(Predicate<? super U> condition, Class<U> cls) {
         int count = 0;
-        Map<T, Integer> matchingKeys = Maps.filterKeys(this.items, item -> cls.isInstance(item) && (condition.apply((U)item)));
+        Map<T, Integer> matchingKeys = Maps.filterKeys(this.items, item -> cls.isInstance(item) && (condition.test((U)item)));
         for (Integer i : matchingKeys.values()) {
             count += i;
         }
@@ -243,13 +269,40 @@ public class ItemPool<T extends InventoryItem> implements Iterable<Entry<T, Inte
         // need not set out-of-sync: either remove did set, or nothing was removed
     }
 
+    public void removeIf(Predicate<T> filter) {
+        items.keySet().removeIf(filter);
+    }
+
+    public void retainIf(Predicate<T> filter) {
+        items.keySet().removeIf(filter.negate());
+    }
+
+    public T find(Predicate<T> filter) {
+        return items.keySet().stream().filter(filter).findFirst().orElse(null);
+    }
+
     public void clear() {
         items.clear();
     }
 
     @Override
     public boolean equals(final Object obj) {
-        return (obj instanceof ItemPool) &&
-                (this.items.equals(((ItemPool)obj).items));
+        return (obj instanceof ItemPool ip) &&
+                (this.items.equals(ip.items));
+    }
+
+    /**
+     * Applies a predicate to this ItemPool's entries.
+     *
+     * @param predicate the Predicate to apply to this ItemPool
+     * @return a new ItemPool made from this ItemPool with only the items that agree with the provided Predicate
+     */
+    public ItemPool<T> getFilteredPool(Predicate<T> predicate) {
+        ItemPool<T> filteredPool = new ItemPool<>(myClass);
+        for (T c : this.items.keySet()) {
+            if (predicate.test(c))
+                filteredPool.add(c, this.items.get(c));
+        }
+        return filteredPool;
     }
 }

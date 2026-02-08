@@ -4,10 +4,10 @@ import java.util.List;
 import java.util.Map;
 
 import com.google.common.collect.Iterables;
-
 import forge.game.Game;
 import forge.game.GameActionUtil;
 import forge.game.GameEntityCounterTable;
+import forge.game.ability.AbilityFactory;
 import forge.game.ability.AbilityKey;
 import forge.game.ability.AbilityUtils;
 import forge.game.ability.SpellAbilityEffect;
@@ -22,6 +22,12 @@ import forge.util.Localizer;
 import forge.util.TextUtil;
 
 public class ChangeZoneAllEffect extends SpellAbilityEffect {
+
+    @Override
+    public void buildSpellAbility(SpellAbility sa) {
+        AbilityFactory.adjustChangeZoneTarget(sa.getMapParams(), sa);
+    }
+
     @Override
     protected String getStackDescription(SpellAbility sa) {
         // TODO build Stack Description will need expansion as more cards are added
@@ -108,10 +114,8 @@ public class ChangeZoneAllEffect extends SpellAbilityEffect {
             final Zone originZone = game.getZoneOf(c);
 
             // Fizzle spells so that they are removed from stack (e.g. Summary Dismissal)
-            if (sa.hasParam("Fizzle")) {
-                if (originZone.is(ZoneType.Exile) || originZone.is(ZoneType.Hand) || originZone.is(ZoneType.Stack)) {
-                    game.getStack().remove(c);
-                }
+            if (originZone.is(ZoneType.Stack)) {
+                game.getStack().remove(c);
             }
 
             if (remLKI) {
@@ -123,16 +127,6 @@ public class ChangeZoneAllEffect extends SpellAbilityEffect {
 
             if (destination == ZoneType.Battlefield) {
                 moveParams.put(AbilityKey.SimultaneousETB, cards);
-                if (sa.hasAdditionalAbility("AnimateSubAbility")) {
-                    // need LKI before Animate does apply
-                    moveParams.put(AbilityKey.CardLKI, CardCopyService.getLKICopy(c));
-
-                    final SpellAbility animate = sa.getAdditionalAbility("AnimateSubAbility");
-                    source.addRemembered(c);
-                    AbilityUtils.resolve(animate);
-                    source.removeRemembered(c);
-                    animate.setSVar("unanimateTimestamp", String.valueOf(game.getTimestamp()));
-                }
                 if (sa.hasParam("Tapped")) {
                     c.setTapped(true);
                 }
@@ -199,9 +193,11 @@ public class ChangeZoneAllEffect extends SpellAbilityEffect {
 
         triggerList.triggerChangesZoneAll(game, sa);
 
-        if (sa.hasParam("Duration")) {
-            addUntilCommand(sa, untilHostLeavesPlayCommand(triggerList, sa));
+        if (sa.hasParam("AtEOT") && !triggerList.isEmpty()) {
+            registerDelayedTrigger(sa, sa.getParam("AtEOT"), triggerList.allCards());
         }
+
+        changeZoneUntilCommand(triggerList, sa);
 
         // CR 701.20d If an effect would cause a player to shuffle a set of objects into a library,
         // that library is shuffled even if there are no objects in that set. 

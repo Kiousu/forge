@@ -20,7 +20,9 @@ public class SettingData {
     public Float cardTooltipAdjLandscape;
     public boolean dayNightBG;
     public boolean disableWinLose;
+    public boolean disableNotForSale;
     public boolean showShopOverlay;
     public boolean useAllCardVariants;
+    public boolean excludeAlchemyVariants;
     public boolean generateLDADecks;
 }

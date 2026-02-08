@@ -17,15 +17,8 @@
  */
 package forge.game.mana;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
-
 import forge.card.mana.ManaAtom;
 import forge.card.mana.ManaCostShard;
 import forge.game.Game;
@@ -40,6 +33,8 @@ import forge.game.replacement.ReplacementType;
 import forge.game.spellability.AbilityManaPart;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbilityUnspentMana;
+
+import java.util.*;
 
 /**
  * <p>
@@ -154,6 +149,10 @@ public class ManaPool extends ManaConversionMatrix implements Iterable<Mana> {
                     if (mana.getManaAbility() != null && mana.getManaAbility().isPersistentMana()) {
                         pMana.add(mana);
                     }
+                    if (mana.getManaAbility() != null && mana.getManaAbility().isCombatMana() &&
+                            !owner.getGame().getPhaseHandler().is(PhaseType.COMBAT_END)) {
+                        pMana.add(mana);
+                    }
                 }
             }
             cm.removeAll(pMana);
@@ -176,7 +175,7 @@ public class ManaPool extends ManaConversionMatrix implements Iterable<Mana> {
         List<Mana> convert = Lists.newArrayList();
         Collection<Mana> cm = floatingMana.get(originalColor);
         for (Mana m : cm) {
-            convert.add(new Mana(toColor, m.getSourceCard(), m.getManaAbility()));
+            convert.add(new Mana(toColor, m.getSourceCard(), m.getManaAbility(), m.getPlayer()));
         }
         cm.clear();
         floatingMana.putAll(toColor, convert);
@@ -321,7 +320,6 @@ public class ManaPool extends ManaConversionMatrix implements Iterable<Mana> {
      * Checks if the given mana cost can be paid from floating mana.
      * @param cost mana cost to pay for
      * @param sa ability to pay for
-     * @param player activating player
      * @param test actual payment is made if this is false
      * @param manaSpentToPay list of mana spent
      * @return whether the floating mana is sufficient to pay the cost fully

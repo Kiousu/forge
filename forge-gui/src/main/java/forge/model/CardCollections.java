@@ -17,8 +17,6 @@
  */
 package forge.model;
 
-import java.io.File;
-
 import forge.deck.Deck;
 import forge.deck.DeckGroup;
 import forge.deck.io.DeckGroupSerializer;
@@ -26,6 +24,8 @@ import forge.deck.io.DeckStorage;
 import forge.localinstance.properties.ForgeConstants;
 import forge.util.storage.IStorage;
 import forge.util.storage.StorageImmediatelySerialized;
+
+import java.io.File;
 
 /**
  * Holds editable maps of decks saved to disk. Adding or removing items to(from)
@@ -112,7 +112,8 @@ public class CardCollections {
     public IStorage<Deck> getCommander() {
         if (commander == null) {
             commander = new StorageImmediatelySerialized<>("Commander decks",
-                    new DeckStorage(new File(ForgeConstants.DECK_COMMANDER_DIR), ForgeConstants.DECK_BASE_DIR));
+                    new DeckStorage(new File(ForgeConstants.DECK_COMMANDER_DIR), ForgeConstants.DECK_BASE_DIR),
+                    true);
         }
         return commander;
     }

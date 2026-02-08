@@ -33,6 +33,7 @@ import forge.menu.FMenuTab;
 import forge.menu.FPopupMenu;
 import forge.player.PlayerZoneUpdates;
 import forge.screens.match.MatchController;
+import forge.screens.match.MatchScreen;
 import forge.screens.match.TargetingOverlay;
 import forge.toolbox.FCardPanel;
 import forge.toolbox.FDisplayObject;
@@ -179,7 +180,8 @@ public class VStack extends FDropDown {
                 activeItem = display;
             }
             else {
-                activeItem.setHeight(display.preferredHeight); //increase active item height to preferred height if needed
+                if (display != null)
+                    activeItem.setHeight(display.preferredHeight); //increase active item height to preferred height if needed
                 if (activeItem.getBottom() > y) {
                     y = activeItem.getBottom(); //ensure stack height increases if needed
                 }
@@ -222,18 +224,18 @@ public class VStack extends FDropDown {
                     activeItem.getLeft() + VStack.CARD_WIDTH * FCardPanel.TARGET_ORIGIN_FACTOR_X + VStack.PADDING + VStack.BORDER_THICKNESS,
                     activeItem.getTop() + VStack.CARD_HEIGHT * FCardPanel.TARGET_ORIGIN_FACTOR_Y + VStack.PADDING + VStack.BORDER_THICKNESS);
 
-            PlayerView activator = activeStackInstance.getActivatingPlayer();
+            PlayerView activator = activeStackInstance == null ? null : activeStackInstance.getActivatingPlayer();
             arrowOrigin = arrowOrigin.add(screenPos.x, screenPos.y);
 
             StackItemView instance = activeStackInstance;
             while (instance != null) {
                 for (CardView c : instance.getTargetCards()) {
-                    TargetingOverlay.ArcConnection conn = activator.isOpponentOf(c.getController()) ? TargetingOverlay.ArcConnection.FoesStackTargeting : TargetingOverlay.ArcConnection.FriendsStackTargeting;
+                    TargetingOverlay.ArcConnection conn = activator != null && activator.isOpponentOf(c.getController()) ? TargetingOverlay.ArcConnection.FoesStackTargeting : TargetingOverlay.ArcConnection.FriendsStackTargeting;
                     TargetingOverlay.drawArrow(g, arrowOrigin, VCardDisplayArea.CardAreaPanel.get(c).getTargetingArrowOrigin(), conn);
                 }
                 for (PlayerView p : instance.getTargetPlayers()) {
-                    TargetingOverlay.ArcConnection conn = activator.isOpponentOf(p) ? TargetingOverlay.ArcConnection.FoesStackTargeting : TargetingOverlay.ArcConnection.FriendsStackTargeting;
-                    TargetingOverlay.drawArrow(g, arrowOrigin, MatchController.getView().getPlayerPanel(p).getAvatar().getTargetingArrowOrigin(), conn);
+                    TargetingOverlay.ArcConnection conn = activator != null && activator.isOpponentOf(p) ? TargetingOverlay.ArcConnection.FoesStackTargeting : TargetingOverlay.ArcConnection.FriendsStackTargeting;
+                    TargetingOverlay.drawArrow(g, arrowOrigin, MatchScreen.getPlayerPanel(p).getAvatar().getTargetingArrowOrigin(), conn);
                 }
                 instance = instance.getSubInstance();
             }
@@ -250,7 +252,9 @@ public class VStack extends FDropDown {
             stackInstance = stackInstance0;
             CardView card = stackInstance.getSourceCard();
 
-            text = stackInstance.getText();
+            text = stackInstance.getText()
+                .replace("\\r", "\r")
+                .replace("\\n", "\n");
             if (stackInstance.isOptionalTrigger() &&
                     stackInstance0.getActivatingPlayer().equals(MatchController.instance.getCurrentPlayer())) {
                 text = "(OPTIONAL) " + text;

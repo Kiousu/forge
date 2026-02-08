@@ -35,7 +35,6 @@ import forge.player.PlayerControllerHuman;
 import forge.sound.MusicPlaylist;
 import forge.sound.SoundSystem;
 import forge.trackable.TrackableCollection;
-import forge.util.CollectionSuppliers;
 import forge.util.TextUtil;
 import forge.util.collect.FCollectionView;
 import forge.util.maps.HashMapOfLists;
@@ -155,6 +154,10 @@ public class HostedMatch {
 
         game = match.createGame();
         game.EXPERIMENTAL_RESTORE_SNAPSHOT = FModel.getPreferences().getPrefBoolean(FPref.MATCH_EXPERIMENTAL_RESTORE);
+        game.AI_TIMEOUT = FModel.getPreferences().getPrefInt(FPref.MATCH_AI_TIMEOUT);
+        // Android API 31 and above can use completeOnTimeout -> CompletableFuture:
+        //https://developer.android.com/reference/java/util/concurrent/CompletableFuture#completeOnTimeout(T,%20long,%20java.util.concurrent.TimeUnit)
+        game.AI_CAN_USE_TIMEOUT = !GuiBase.isAndroid() || GuiBase.getAndroidAPILevel() > 30;
 
         StaticData.instance().setSourceImageForClone(FModel.getPreferences().getPrefBoolean(FPref.UI_CLONE_MODE_SOURCE));
 
@@ -176,7 +179,7 @@ public class HostedMatch {
         final GameView gameView = getGameView();
 
         humanCount = 0;
-        final MapOfLists<IGuiGame, PlayerView> playersPerGui = new HashMapOfLists<>(CollectionSuppliers.arrayLists());
+        final MapOfLists<IGuiGame, PlayerView> playersPerGui = new HashMapOfLists<>(ArrayList::new);
         for (int iPlayer = 0; iPlayer < players.size(); iPlayer++) {
             final RegisteredPlayer rp = match.getPlayers().get(iPlayer);
             final Player p = players.get(iPlayer);
@@ -263,7 +266,16 @@ public class HostedMatch {
             isMatchOver = match.isMatchOver();
             if (humanCount == 0) {
                 // ... if no human players, let AI decide next game
-                if (isMatchOver) {
+                if (game.getRules().getGameType() == GameType.Constructed) {
+                    // Dramatic interlude to signal end of game.
+                    FThreads.delayInEDT(3000, () -> {
+                        if (isMatchOver) {
+                            // Leave match-end overview open for spectator.
+                        } else {
+                            addNextGameDecision(null, NextGameDecision.CONTINUE);
+                        }
+                    });
+                } else if (isMatchOver) {
                     addNextGameDecision(null, NextGameDecision.QUIT);
                 } else {
                     addNextGameDecision(null, NextGameDecision.CONTINUE);
@@ -347,9 +359,9 @@ public class HostedMatch {
         @Override
         public Void visit(final UiEventBlockerAssigned event) {
             for (final PlayerControllerHuman humanController : humanControllers) {
-                humanController.getGui().updateSingleCard(event.blocker);
+                humanController.getGui().updateSingleCard(event.blocker());
                 final PlayerView p = humanController.getPlayer().getView();
-                if (event.attackerBeingBlocked != null && event.attackerBeingBlocked.getController().equals(p)) {
+                if (event.attackerBeingBlocked() != null && event.attackerBeingBlocked().getController().equals(p)) {
                     humanController.getGui().autoPassCancel(p);
                 }
             }
@@ -359,27 +371,27 @@ public class HostedMatch {
         @Override
         public Void visit(final UiEventAttackerDeclared event) {
             for (final PlayerControllerHuman humanController : humanControllers) {
-                humanController.getGui().updateSingleCard(event.attacker);
+                humanController.getGui().updateSingleCard(event.attacker());
             }
             return null;
         }
 
         @Override
         public Void visit(final UiEventNextGameDecision event) {
-            addNextGameDecision(event.getController(), event.getDecision());
+            addNextGameDecision(event.controller(), event.decision());
             return null;
         }
 
         @Override
         public Void visit(final GameEventSubgameStart event) {
             subGameCount++;
-            event.subgame.subscribeToEvents(SoundSystem.instance);
-            event.subgame.subscribeToEvents(visitor);
+            event.subgame().subscribeToEvents(SoundSystem.instance);
+            event.subgame().subscribeToEvents(visitor);
 
-            final GameView gameView = event.subgame.getView();
+            final GameView gameView = event.subgame().getView();
 
             Runnable switchGameView = () -> {
-                for (final Player p : event.subgame.getPlayers()) {
+                for (final Player p : event.subgame().getPlayers()) {
                     if (p.getController() instanceof PlayerControllerHuman) {
                         final PlayerControllerHuman humanController = (PlayerControllerHuman) p.getController();
                         final IGuiGame gui = guis.get(p.getRegisteredPlayer());
@@ -390,8 +402,8 @@ public class HostedMatch {
                         gui.openView(new TrackableCollection<>(p.getView()));
                         gui.setGameView(null);
                         gui.setGameView(gameView);
-                        event.subgame.subscribeToEvents(new FControlGameEventHandler(humanController));
-                        gui.message(event.message);
+                        event.subgame().subscribeToEvents(new FControlGameEventHandler(humanController));
+                        gui.message(event.message());
                     }
                 }
             };
@@ -401,7 +413,7 @@ public class HostedMatch {
                 GuiBase.getInterface().invokeInEdtAndWait(switchGameView);
 
             //ensure opponents set properly
-            for (final Player p : event.subgame.getPlayers()) {
+            for (final Player p : event.subgame().getPlayers()) {
                 p.updateOpponentsForView();
             }
 
@@ -410,9 +422,9 @@ public class HostedMatch {
 
         @Override
         public Void visit(final GameEventSubgameEnd event) {
-            final GameView gameView = event.maingame.getView();
+            final GameView gameView = event.maingame().getView();
             Runnable switchGameView = () -> {
-                for (final Player p : event.maingame.getPlayers()) {
+                for (final Player p : event.maingame().getPlayers()) {
                     if (p.getController() instanceof PlayerControllerHuman) {
                         final PlayerControllerHuman humanController = (PlayerControllerHuman) p.getController();
                         final IGuiGame gui = guis.get(p.getRegisteredPlayer());
@@ -423,7 +435,7 @@ public class HostedMatch {
                         gui.setGameView(null);
                         gui.setGameView(gameView);
                         gui.updatePhase(true);
-                        gui.message(event.message);
+                        gui.message(event.message());
                     }
                 }
             };

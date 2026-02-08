@@ -1,10 +1,8 @@
 package forge.game.replacement;
 
 import java.util.Map;
-
-import org.apache.commons.lang3.ObjectUtils;
-
-import com.google.common.base.Optional;
+import java.util.Objects;
+import java.util.Optional;
 
 import forge.game.ability.AbilityKey;
 import forge.game.card.Card;
@@ -85,7 +83,7 @@ public class ReplaceAddCounter extends ReplacementEffect {
         Map<Optional<Player>, Map<CounterType, Integer>> counterMap = (Map<Optional<Player>, Map<CounterType, Integer>>) runParams.get(AbilityKey.CounterMap);
 
         for (Map.Entry<Optional<Player>, Map<CounterType, Integer>> e : counterMap.entrySet()) {
-            if (!matchesValidParam("ValidSource", e.getKey().orNull())) {
+            if (!matchesValidParam("ValidSource", e.getKey().orElse(null))) {
                 continue;
             }
             if (hasParam("ValidCounterType")) {
@@ -93,7 +91,7 @@ public class ReplaceAddCounter extends ReplacementEffect {
                 if (!e.getValue().containsKey(ct)) {
                     continue;
                 }
-                if (0 >= ObjectUtils.defaultIfNull(e.getValue().get(ct), 0)) {
+                if (0 >= Objects.requireNonNullElse(e.getValue().get(ct), 0)) {
                     continue;
                 }
                 return true;

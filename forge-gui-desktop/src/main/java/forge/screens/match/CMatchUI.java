@@ -19,17 +19,14 @@ package forge.screens.match;
 
 import java.awt.*;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.EnumMap;
-import java.util.HashMap;
+import java.util.*;
 import java.util.List;
-import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicReference;
 
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenu;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -38,7 +35,6 @@ import javax.swing.KeyStroke;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
 
-import com.google.common.base.Function;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -68,6 +64,7 @@ import forge.game.phase.PhaseType;
 import forge.game.player.DelayedReveal;
 import forge.game.player.IHasIcon;
 import forge.game.player.Player;
+import forge.game.player.PlayerController.FullControlFlag;
 import forge.game.player.PlayerView;
 import forge.game.spellability.SpellAbility;
 import forge.game.spellability.SpellAbilityStackInstance;
@@ -105,6 +102,7 @@ import forge.player.PlayerZoneUpdate;
 import forge.player.PlayerZoneUpdates;
 import forge.screens.match.controllers.CAntes;
 import forge.screens.match.controllers.CCombat;
+import forge.screens.match.controllers.CDependencies;
 import forge.screens.match.controllers.CDetailPicture;
 import forge.screens.match.controllers.CDev;
 import forge.screens.match.controllers.CDock;
@@ -126,6 +124,7 @@ import forge.toolbox.imaging.FImageUtil;
 import forge.toolbox.special.PhaseIndicator;
 import forge.toolbox.special.PhaseLabel;
 import forge.trackable.TrackableCollection;
+import forge.util.FSerializableFunction;
 import forge.util.ITriggerEvent;
 import forge.util.Localizer;
 import forge.util.collect.FCollection;
@@ -148,6 +147,10 @@ public final class CMatchUI
     extends AbstractGuiGame
     implements ICDoc, IMenuProvider {
 
+    public static final EnumSet<ZoneType> FLOATING_ZONE_TYPES = EnumSet.of(ZoneType.Library, ZoneType.Graveyard, ZoneType.Exile,
+            ZoneType.Flashback, ZoneType.Command, ZoneType.Ante, ZoneType.Sideboard, ZoneType.PlanarDeck,
+            ZoneType.SchemeDeck, ZoneType.AttractionDeck, ZoneType.ContraptionDeck, ZoneType.Junkyard);
+
     private final FScreen screen;
     private final VMatchUI view;
     private final CMatchUIMenus menus = new CMatchUIMenus(this);
@@ -164,6 +167,7 @@ public final class CMatchUI
 
     private final CAntes cAntes = new CAntes(this);
     private final CCombat cCombat = new CCombat();
+    private final CDependencies cDependencies = new CDependencies(this);
     private final CDetailPicture cDetailPicture = new CDetailPicture(this);
     private final CDev cDev = new CDev(this);
     private final CDock cDock = new CDock(this);
@@ -187,6 +191,7 @@ public final class CMatchUI
         this.myDocs.put(EDocID.REPORT_MESSAGE, getCPrompt().getView());
         this.myDocs.put(EDocID.REPORT_STACK, getCStack().getView());
         this.myDocs.put(EDocID.REPORT_COMBAT, cCombat.getView());
+        this.myDocs.put(EDocID.REPORT_DEPENDENCIES, cDependencies.getView());
         this.myDocs.put(EDocID.REPORT_LOG, cLog.getView());
         this.myDocs.put(EDocID.DEV_MODE, getCDev().getView());
         this.myDocs.put(EDocID.BUTTON_DOCK, getCDock().getView());
@@ -408,6 +413,11 @@ public final class CMatchUI
     } // showCombat(CombatView)
 
     @Override
+    public void updateDependencies() {
+        cDependencies.update();
+    }
+
+    @Override
     public void updateDayTime(String daytime) {
         super.updateDayTime(daytime);
         if ("Day".equals(daytime)) {
@@ -446,7 +456,12 @@ public final class CMatchUI
                 }
             }
 
+            if (updateAnte) {
+                cAntes.update();
+            }
             final VField vField = getFieldViewFor(owner);
+            if(vField == null)
+                return;
             if (setupPlayZone) {
                 vField.getTabletop().update();
             }
@@ -457,9 +472,6 @@ public final class CMatchUI
                 }
                 // update Cards in Hand
                 vField.updateDetails();
-            }
-            if (updateAnte) {
-                cAntes.update();
             }
             if (updateZones) {
                 vField.updateZones();
@@ -484,18 +496,12 @@ public final class CMatchUI
                                 }
                             }
                             break;
-                        case Library:
-                        case Graveyard:
-                        case Exile:
-                        case Flashback:
-                        case Command:
-                        case Ante:
-                        case Sideboard:
+                        default:
+                            if(!FLOATING_ZONE_TYPES.contains(zone))
+                                break;
                             if (FloatingZone.show(this,player,zone)) {
                                 updatedPlayerZones.add(update);
                             }
-                            break;
-                        default:
                             break;
                     }
                 }
@@ -509,22 +515,8 @@ public final class CMatchUI
             for (final PlayerZoneUpdate update : zonesToUpdate) {
                 final PlayerView player = update.getPlayer();
                 for (final ZoneType zone : update.getZones()) {
-                    switch (zone) {
-                        case Battlefield: // always shown
-                            break;
-                        case Hand: // the controller's hand should never be temporarily shown, but ...
-                        case Library:
-                        case Graveyard:
-                        case Exile:
-                        case Flashback:
-                        case Command:
-                        case Ante:
-                        case Sideboard:
-                            FloatingZone.hide(this,player,zone);
-                            break;
-                        default:
-                            break;
-                    }
+                    if(FLOATING_ZONE_TYPES.contains(zone))
+                        FloatingZone.hide(this,player,zone);
                 }
             }
         }
@@ -575,7 +567,7 @@ public final class CMatchUI
                 }
                 break;
             default:
-		        FloatingZone.refresh(c.getController(),zone); // in case the card is visible in the zone
+                FloatingZone.refresh(c.getController(),zone); // in case the card is visible in the zone
                 break;
             }
         }
@@ -702,8 +694,8 @@ public final class CMatchUI
      */
     private CardPanel findCardPanel(final CardView card) {
         final int id = card.getId();
-        switch (card.getZone()) {
-        case Battlefield:
+        ZoneType zone = card.getZone();
+        if (zone == ZoneType.Battlefield) {
             for (final VField f : view.getFieldViews()) {
                 final CardPanel panel = f.getTabletop().getCardPanel(id);
                 if (panel != null) {
@@ -711,8 +703,8 @@ public final class CMatchUI
                     return panel;
                 }
             }
-            break;
-        case Hand:
+        }
+        else if (zone == ZoneType.Hand) {
             for (final VHand h : view.getHands()) {
                 final CardPanel panel = h.getHandArea().getCardPanel(id);
                 if (panel != null) {
@@ -720,15 +712,9 @@ public final class CMatchUI
                     return panel;
                 }
             }
-            break;
-        case Command:
-        case Exile:
-        case Graveyard:
-        case Library:
-            return FloatingZone.getCardPanel(this, card);
-        default:
-            break;
         }
+        else if (FLOATING_ZONE_TYPES.contains(zone))
+            return FloatingZone.getCardPanel(this, card);
         return null;
     }
 
@@ -1085,7 +1071,7 @@ public final class CMatchUI
     }
 
     @Override
-    public <T> List<T> getChoices(final String message, final int min, final int max, final List<T> choices, final T selected, final Function<T, String> display) {
+    public <T> List<T> getChoices(final String message, final int min, final int max, final List<T> choices, final List<T> selected, final FSerializableFunction<T, String> display) {
         /*if ((choices != null && !choices.isEmpty() && choices.iterator().next() instanceof GameObject) || selected instanceof GameObject) {
             System.err.println("Warning: GameObject passed to GUI! Printing stack trace.");
             Thread.dumpStack();
@@ -1130,7 +1116,7 @@ public final class CMatchUI
 
     @Override
     public List<CardView> manipulateCardList(final String title, final Iterable<CardView> cards, final Iterable<CardView> manipulable, final boolean toTop, final boolean toBottom, final boolean toAnywhere) {
-	return GuiChoose.manipulateCardList(this, title, cards, manipulable, toTop, toBottom, toAnywhere);
+        return GuiChoose.manipulateCardList(this, title, cards, manipulable, toTop, toBottom, toAnywhere);
     }
 
     @Override
@@ -1226,6 +1212,7 @@ public final class CMatchUI
         final List<VField> fieldViews = getFieldViews();
 
         // Human field is at index [0]
+        //TODO: Rework without that assumption; not true in 4 AI game or hotseat game.
         final PhaseIndicator fvHuman = fieldViews.get(0).getPhaseIndicator();
         fvHuman.getLblUpkeep().setEnabled(prefs.getPrefBoolean(FPref.PHASE_HUMAN_UPKEEP));
         fvHuman.getLblDraw().setEnabled(prefs.getPrefBoolean(FPref.PHASE_HUMAN_DRAW));
@@ -1282,15 +1269,15 @@ public final class CMatchUI
 
     @Override
     public void notifyStackAddition(GameEventSpellAbilityCast event) {
-        SpellAbility sa = event.sa;
+        SpellAbility sa = event.sa();
         String stackNotificationPolicy = FModel.getPreferences().getPref(FPref.UI_STACK_EFFECT_NOTIFICATION_POLICY);
         boolean isAi = sa.getActivatingPlayer().isAI();
         boolean isTrigger = sa.isTrigger();
-        int stackIndex = event.stackIndex;
+        int stackIndex = event.stackIndex();
         if (stackIndex == nextNotifiableStackIndex) {
             if (ForgeConstants.STACK_EFFECT_NOTIFICATION_ALWAYS.equals(stackNotificationPolicy) || (ForgeConstants.STACK_EFFECT_NOTIFICATION_AI_AND_TRIGGERED.equals(stackNotificationPolicy) && (isAi || isTrigger))) {
                 // We can go and show the modal
-                SpellAbilityStackInstance si = event.si;
+                SpellAbilityStackInstance si = event.si();
 
                 MigLayout migLayout = new MigLayout("insets 15, left, gap 30, fill");
                 JPanel mainPanel = new JPanel(migLayout);
@@ -1451,8 +1438,8 @@ public final class CMatchUI
     private int getRotation(CardView cardView) {
         final int rotation;
         if (cardView.isSplitCard()) {
-            String cardName = cardView.getName();
-            if (cardName.isEmpty()) { cardName = cardView.getAlternateState().getName(); }
+            String cardName = cardView.getOracleName();
+            if (cardName.isEmpty()) { cardName = cardView.getAlternateState().getOracleName(); }
 
             PaperCard pc = StaticData.instance().getCommonCards().getCard(cardName);
             boolean hasKeywordAftermath = pc != null && Card.getCardForUi(pc).hasKeyword(Keyword.AFTERMATH);
@@ -1518,5 +1505,41 @@ public final class CMatchUI
 
             FOptionPane.showOptionDialog(null, title, null, mainPanel, options);
         }
+    }
+
+    public void showFullControl(PlayerView pv, MouseEvent e) {
+        if (pv.isAI()) {
+            return;
+        }
+        Set<FullControlFlag> controlFlags = getGameView().getGame().getPlayer(pv).getController().getFullControl();
+        final String lblFullControl = Localizer.getInstance().getMessage("lblFullControl");
+        final JPopupMenu menu = new JPopupMenu(lblFullControl);
+        menu.add(
+                GuiUtils.createMenuItem("- " + lblFullControl + " -", null, null, false, true)
+        );
+
+        addFullControlEntry(menu, "lblChooseCostOrder", FullControlFlag.ChooseCostOrder, controlFlags);
+        addFullControlEntry(menu, "lblChooseCostReductionOrder", FullControlFlag.ChooseCostReductionOrderAndVariableAmount, controlFlags);
+        addFullControlEntry(menu, "lblNoPaymentFromManaAbility", FullControlFlag.NoPaymentFromManaAbility, controlFlags);
+        addFullControlEntry(menu, "lblNoFreeCombatCostHandling", FullControlFlag.NoFreeCombatCostHandling, controlFlags);
+        addFullControlEntry(menu, "lblAllowPaymentStartWithMissingResources", FullControlFlag.AllowPaymentStartWithMissingResources, controlFlags);
+        addFullControlEntry(menu, "lblLayerTimestampOrder", FullControlFlag.LayerTimestampOrder, controlFlags);
+
+        menu.show(view.getControl().getFieldViewFor(pv).getAvatarArea(), e.getX(), e.getY());
+    }
+
+    private void addFullControlEntry(JPopupMenu menu, String label, FullControlFlag flag, Set<FullControlFlag> controlFlags) {
+        JCheckBoxMenuItem item = new JCheckBoxMenuItem(Localizer.getInstance().getMessage(label));
+        if (controlFlags.contains(flag)) {
+            item.setSelected(true);
+        }
+        item.addActionListener(arg0 -> {
+            if (controlFlags.contains(flag)) {
+                controlFlags.remove(flag);
+            } else {
+                controlFlags.add(flag);
+            }
+        });
+        menu.add(item);
     }
 }

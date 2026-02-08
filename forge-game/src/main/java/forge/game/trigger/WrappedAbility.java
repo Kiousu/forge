@@ -2,10 +2,7 @@ package forge.game.trigger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
 
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.TreeBasedTable;
 
@@ -39,47 +36,8 @@ import forge.game.spellability.TargetRestrictions;
 // use of any of the methods)
 public class WrappedAbility extends Ability {
 
-    static Set<ApiType> noTimestampCheck = ImmutableSet.of(
-            ApiType.Abandon, // no Triggered
-            ApiType.AddPhase, // only player
-            ApiType.AddTurn, // only player
-
-            ApiType.Amass, // no Triggered only you
-            ApiType.Ascend, // only player (you)
-
-            ApiType.BecomeMonarch, // only player
-            ApiType.Bond, // updated
-
-            ApiType.PutCounter,
-            ApiType.MoveCounter,
-            ApiType.MultiplyCounter,
-            ApiType.MoveCounter,
-            ApiType.RemoveCounter,
-            ApiType.AddOrRemoveCounter,
-            ApiType.MoveCounter,
-            ApiType.Draw,
-            ApiType.GainLife,
-            ApiType.LoseLife,
-            ApiType.ChangeZone,
-            ApiType.Destroy,
-            ApiType.Token,
-            ApiType.SetState,
-            ApiType.Play,
-            ApiType.SacrificeAll,
-            ApiType.Pump,
-
-            ApiType.DealDamage, // checked
-
-            ApiType.Regenerate, // Updated
-            ApiType.Regeneration, // Replacement Effect only
-
-            ApiType.DelayedTrigger
-            );
-
     private final SpellAbility sa;
     private Player decider;
-
-    boolean mandatory = false;
 
     public WrappedAbility(final Trigger regtrig0, final SpellAbility sa0, final Player decider0) {
         super(sa0.getHostCard(), ManaCost.ZERO);
@@ -225,7 +183,7 @@ public class WrappedAbility extends Ability {
     // a real solution would include only the triggering information that actually is used, but that's a major change
     @Override
     public String toUnsuppressedString() {
-        String desc = this.getStackDescription(); /* use augmented stack description as string for wrapped things */
+        String desc = this.getStackDescription(false); /* use augmented stack description as string for wrapped things */
         String card = getHostCard().toString();
         if (!desc.contains(card) && desc.contains(" this ")) { /* a hack for Evolve and similar that don't have CARDNAME */
                 return card + ": " + desc;
@@ -234,15 +192,23 @@ public class WrappedAbility extends Ability {
 
     @Override
     public String getStackDescription() {
+        return getStackDescription(true);
+    }
+
+    public String getStackDescription(boolean withTargets) {
         final Trigger regtrig = getTrigger();
         if (regtrig == null) return "";
         final StringBuilder sb =
                 new StringBuilder(regtrig.replaceAbilityText(regtrig.toString(true), this, true));
-        List<TargetChoices> allTargets = sa.getAllTargetChoices();
-        if (!allTargets.isEmpty() && !ApiType.Charm.equals(sa.getApi())) {
-            sb.append(" (Targeting: ");
-            sb.append(allTargets);
-            sb.append(")");
+
+        // prevent text growing too long when SA target other in a chain and also potential StackOverflow
+        if (withTargets) {
+            List<TargetChoices> allTargets = sa.getAllTargetChoices();
+            if (!allTargets.isEmpty() && !ApiType.Charm.equals(sa.getApi())) {
+                sb.append(" (Targeting: ");
+                sb.append(allTargets);
+                sb.append(")");
+            }
         }
 
         String important = regtrig.getImportantStackObjects(this);
@@ -319,6 +285,11 @@ public class WrappedAbility extends Ability {
     }
 
     @Override
+    public boolean hasSVar(String name) {
+        return sa.hasSVar(name);
+    }
+
+    @Override
     public String getSVar(String name) {
         return sa.getSVar(name);
     }
@@ -326,6 +297,11 @@ public class WrappedAbility extends Ability {
     @Override
     public Integer getSVarInt(String name) {
         return sa.getSVarInt(name);
+    }
+
+    @Override
+    public void setSVar(final String name, final String value) {
+        sa.setSVar(name, value);
     }
 
     @Override
@@ -346,10 +322,6 @@ public class WrappedAbility extends Ability {
     @Override
     public void setActivatingPlayer(final Player player) {
         sa.setActivatingPlayer(player);
-    }
-    @Override
-    public boolean setActivatingPlayer(final Player player, final boolean lki) {
-        return sa.setActivatingPlayer(player, lki);
     }
 
     @Override
@@ -388,11 +360,6 @@ public class WrappedAbility extends Ability {
     @Override
     public void setTargetCard(final Card card) {
         sa.setTargetCard(card);
-    }
-
-    @Override
-    public void setSourceTrigger(final int id) {
-        sa.setSourceTrigger(id);
     }
 
     @Override
@@ -476,40 +443,14 @@ public class WrappedAbility extends Ability {
 
         if (decider != null) {
             if (!decider.isInGame()) {
-                decider = SpellAbilityEffect.getNewChooser(sa, getActivatingPlayer(), decider);
+                decider = SpellAbilityEffect.getNewChooser(sa, decider);
             }
             if (!decider.getController().confirmTrigger(this)) {
                 return;
             }
         }
 
-        timestampCheck();
-
         getActivatingPlayer().getController().playSpellAbilityNoStack(sa, false);
-    }
-
-    /**
-     * TODO remove this function after the Effects are updated
-     */
-    protected void timestampCheck() {
-        final Game game = sa.getActivatingPlayer().getGame();
-
-        if (noTimestampCheck.contains(sa.getApi())) {
-            return;
-        }
-
-        final Map<AbilityKey, Object> triggerMap = AbilityKey.newMap(sa.getTriggeringObjects());
-        for (Entry<AbilityKey, Object> ev : triggerMap.entrySet()) {
-            if (ev.getValue() instanceof Card) {
-                Card card = (Card) ev.getValue();
-                Card current = game.getCardState(card);
-                if (card.isInPlay() && current.isInPlay() && !current.equalsWithGameTimestamp(card)) {
-                    // TODO: figure out if NoTimestampCheck should be the default for ChangesZone triggers
-                    sa.getTriggeringObjects().remove(ev.getKey());
-                }
-            }
-        }
-        // TODO: CardCollection
     }
 
     @Override

@@ -18,9 +18,9 @@
 package forge.game.spellability;
 
 import java.util.Map;
+import java.util.Objects;
 
 import forge.game.card.CardCopyService;
-import org.apache.commons.lang3.ObjectUtils;
 
 import forge.card.CardStateName;
 import forge.game.Game;
@@ -30,6 +30,7 @@ import forge.game.card.CardFactory;
 import forge.game.cost.Cost;
 import forge.game.cost.CostPayment;
 import forge.game.player.Player;
+import forge.game.player.PlayerController.FullControlFlag;
 import forge.game.replacement.ReplacementType;
 import forge.game.staticability.StaticAbilityCantBeCast;
 import forge.game.zone.ZoneType;
@@ -65,27 +66,31 @@ public abstract class Spell extends SpellAbility implements java.io.Serializable
     /** {@inheritDoc} */
     @Override
     public boolean canPlay() {
+        return canPlayFromHost() != null;
+    }
+
+    public Card canPlayFromHost() {
         Card card = this.getHostCard();
         if (card.isInPlay()) {
-            return false;
+            return null;
         }
 
         // CR 118.6 cost is unpayable
-        if (getPayCosts().hasManaCost() && getPayCosts().getCostMana().getMana().isNoCost()) {
-            return false;
+        if (!isCastFromPlayEffect() && getPayCosts().hasManaCost() && getPayCosts().getCostMana().getMana().isNoCost()) {
+            return null;
         }
 
         Player activator = this.getActivatingPlayer();
         if (activator == null) {
             activator = card.getController();
             if (activator == null) {
-            	return false;
+            	return null;
             }
         }
 
         final Game game = activator.getGame();
         if (game.getStack().isSplitSecondOnStack()) {
-            return false;
+            return null;
         }
 
         // do performanceMode only for cases where the activator is different than controller
@@ -95,17 +100,18 @@ public abstract class Spell extends SpellAbility implements java.io.Serializable
             card.setController(activator, 0);
         }
 
-        card = ObjectUtils.firstNonNull(getAlternateHost(card), card);
+        card = Objects.requireNonNullElse(getAlternateHost(card), card);
 
         if (!this.getRestrictions().canPlay(card, this)) {
-            return false;
+            return null;
         }
 
-        if (!CostPayment.canPayAdditionalCosts(this.getPayCosts(), this, false)) {
-            return false;
+        if (!activator.getController().isFullControl(FullControlFlag.AllowPaymentStartWithMissingResources) &&
+                !CostPayment.canPayAdditionalCosts(this.getPayCosts(), this, false)) {
+            return null;
         }
 
-        return true;
+        return card;
     }
 
     /** {@inheritDoc} */
@@ -163,7 +169,7 @@ public abstract class Spell extends SpellAbility implements java.io.Serializable
                 source = CardCopyService.getLKICopy(source);
             }
 
-            source.animateBestow(false);
+            source.animateBestow();
             lkicheck = true;
         } else if (isCastFaceDown()) {
             // need a copy of the card to turn facedown without trigger anything
@@ -191,7 +197,7 @@ public abstract class Spell extends SpellAbility implements java.io.Serializable
             source.setLKICMC(-1);
             source.setLKICMC(source.getCMC());
             lkicheck = true;
-        } else if (hasParam("Prototype")) {
+        } else if (hasParam("Prototype") && source.getPrototypeTimestamp() == -1) {
             if (!source.isLKI()) {
                 source = CardCopyService.getLKICopy(source);
             }

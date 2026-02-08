@@ -1,16 +1,11 @@
 package forge.ai.simulation;
 
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
 import forge.ai.ComputerUtil;
 import forge.ai.PlayerControllerAi;
 import forge.ai.simulation.GameStateEvaluator.Score;
 import forge.game.Game;
+import forge.game.GameActionUtil;
 import forge.game.GameObject;
 import forge.game.card.Card;
 import forge.game.phase.PhaseType;
@@ -18,6 +13,8 @@ import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.spellability.TargetChoices;
 import forge.util.collect.FCollectionView;
+
+import java.util.*;
 
 public class GameSimulator {
     public static boolean COPY_STACK = false;
@@ -135,6 +132,19 @@ public class GameSimulator {
         Card hostCard = (Card) copier.find(origHostCard);
         String desc = sa.getDescription();
         FCollectionView<SpellAbility> candidates = hostCard.getSpellAbilities();
+
+        SpellAbility result = saMatcher(candidates, desc);
+        for (SpellAbility cSa : candidates) {
+            if (result != null) {
+                break;
+            }
+            result = saMatcher(GameActionUtil.getAlternativeCosts(cSa, aiPlayer, true), desc);
+        }
+
+        return result;
+    }
+
+    private SpellAbility saMatcher(Iterable<SpellAbility> candidates, String desc) {
         // first pass for accuracy (spells with alternative costs)
         for (SpellAbility cSa : candidates) {
             if (desc.equals(cSa.getDescription())) {
@@ -173,7 +183,7 @@ public class GameSimulator {
             }
 
             debugPrint("Found SA " + sa + " on host card " + sa.getHostCard() + " with owner:"+ sa.getHostCard().getOwner());
-            sa.setActivatingPlayer(aiPlayer, true);
+            sa.setActivatingPlayer(aiPlayer);
             SpellAbility origSaOrSubSa = origSa;
             SpellAbility saOrSubSa = sa;
             do {

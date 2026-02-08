@@ -10,17 +10,22 @@ public enum AlternativeCost {
     Escape,
     Evoke,
     Flashback,
+    Harmonize,
     Foretold,
     Freerunning,
     Impending,
     Madness,
+    Mayhem,
     MTMtE, // More Than Meets the Eye (Transformers Universes Beyond)
     Mutate,
-    Offering,
     Overload,
     Prowl,
     Plotted,
+    Sneak,
     Spectacle,
-    Surge;
+    Surge,
+    Warp,
+    WebSlinging
+    ;
 
 }

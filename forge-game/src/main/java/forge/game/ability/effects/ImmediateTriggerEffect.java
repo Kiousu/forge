@@ -23,7 +23,8 @@ public class ImmediateTriggerEffect extends SpellAbilityEffect {
     protected String getStackDescription(SpellAbility sa) {
         if (sa.hasParam("TriggerDescription")) {
             return sa.getParam("TriggerDescription");
-        } else if (sa.hasParam("SpellDescription")) {
+        }
+        if (sa.hasParam("SpellDescription")) {
             return sa.getParam("SpellDescription");
         }
 
@@ -34,6 +35,9 @@ public class ImmediateTriggerEffect extends SpellAbilityEffect {
     public void resolve(SpellAbility sa) {
         final Card host = sa.getHostCard();
         final Game game = host.getGame();
+
+        // CR 603.12a if the trigger event or events occur multiple times during the resolution of the spell or ability that created it,
+        // the reflexive triggered ability will trigger once for each of those times
         int amt = AbilityUtils.calculateAmount(host, sa.getParamOrDefault("TriggerAmount", "1"), sa);
         if (amt <= 0) {
             return;
@@ -51,19 +55,16 @@ public class ImmediateTriggerEffect extends SpellAbilityEffect {
         final Trigger immediateTrig = TriggerHandler.parseTrigger(mapParams, host, sa.isIntrinsic(), null);
         immediateTrig.setSpawningAbility(sa.copy(host, true));
 
-        // Need to copy paid costs
-
         if (sa.hasParam("RememberObjects")) {
-            for (final String rem : sa.getParam("RememberObjects").split(",")) {
-                for (final Object o : AbilityUtils.getDefinedEntities(host, rem, sa)) {
-                    immediateTrig.addRemembered(o);
-                }
-            }
+            immediateTrig.addRemembered(
+                    AbilityUtils.getDefinedEntities(host, sa.getParam("RememberObjects").split(" & "), sa)
+            );
         }
 
         if (sa.hasParam("RememberSVarAmount")) {
-            immediateTrig.addRemembered(AbilityUtils.calculateAmount(host,
-                    sa.getSVar(sa.getParam("RememberSVarAmount")), sa));
+            immediateTrig.addRemembered(
+                    AbilityUtils.calculateAmount(host, sa.getSVar(sa.getParam("RememberSVarAmount")), sa)
+            );
         }
 
         if (sa.hasAdditionalAbility("Execute")) {

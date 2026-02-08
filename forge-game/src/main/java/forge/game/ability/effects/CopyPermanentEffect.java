@@ -2,18 +2,16 @@ package forge.game.ability.effects;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Predicate;
 
 import forge.card.GamePieceType;
-import forge.util.Lang;
+import forge.item.PaperCardPredicates;
+import forge.util.*;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.mutable.MutableBoolean;
 
-import com.google.common.base.Predicate;
-import com.google.common.base.Predicates;
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 
-import forge.ImageKeys;
 import forge.StaticData;
 import forge.card.CardRarity;
 import forge.card.CardRulesPredicates;
@@ -33,10 +31,6 @@ import forge.game.player.PlayerActionConfirmMode;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import forge.item.PaperCard;
-import forge.util.Aggregates;
-import forge.util.Localizer;
-import forge.util.PredicateString.StringOp;
-import forge.util.TextUtil;
 
 public class CopyPermanentEffect extends TokenEffectBase {
 
@@ -154,19 +148,18 @@ public class CopyPermanentEffect extends TokenEffectBase {
             List<Card> tgtCards = Lists.newArrayList();
 
             if (sa.hasParam("ValidSupportedCopy")) {
-                List<PaperCard> cards = Lists.newArrayList(StaticData.instance().getCommonCards().getUniqueCards());
+                Iterable<PaperCard> cards = StaticData.instance().getCommonCards().getUniqueCards();
                 String valid = sa.getParam("ValidSupportedCopy");
                 if (valid.contains("X")) {
                     valid = TextUtil.fastReplace(valid,
                             "X", Integer.toString(AbilityUtils.calculateAmount(host, "X", sa)));
                 }
                 if (StringUtils.containsIgnoreCase(valid, "creature")) {
-                    Predicate<PaperCard> cpp = Predicates.compose(CardRulesPredicates.Presets.IS_CREATURE, PaperCard::getRules);
-                    cards = Lists.newArrayList(Iterables.filter(cards, cpp));
+                    cards = IterableUtil.filter(cards, PaperCardPredicates.IS_CREATURE);
                 }
                 if (StringUtils.containsIgnoreCase(valid, "equipment")) {
-                    Predicate<PaperCard> cpp = Predicates.compose(CardRulesPredicates.Presets.IS_EQUIPMENT, PaperCard::getRules);
-                    cards = Lists.newArrayList(Iterables.filter(cards, cpp));
+                    Predicate<PaperCard> cpp = PaperCardPredicates.fromRules(CardRulesPredicates.IS_EQUIPMENT);
+                    cards = IterableUtil.filter(cards, cpp);
                 }
                 if (sa.hasParam("RandomCopied")) {
                     List<PaperCard> copysource = Lists.newArrayList(cards);
@@ -190,19 +183,15 @@ public class CopyPermanentEffect extends TokenEffectBase {
                     System.err.println("Copying random permanent(s): " + tgtCards.toString());
                 }
             } else if (sa.hasParam("DefinedName")) {
-                List<PaperCard> cards = Lists.newArrayList(StaticData.instance().getCommonCards().getUniqueCards());
                 String name = sa.getParam("DefinedName");
                 if (name.equals("NamedCard")) {
                     if (!host.getNamedCard().isEmpty()) {
                         name = host.getNamedCard();
                     }
                 }
-
-                Predicate<PaperCard> cpp = Predicates.compose(CardRulesPredicates.name(StringOp.EQUALS, name), PaperCard::getRules);
-                cards = Lists.newArrayList(Iterables.filter(cards, cpp));
-
-                if (!cards.isEmpty()) {
-                    tgtCards.add(Card.fromPaperCard(cards.get(0), controller));
+                PaperCard pc = StaticData.instance().getCommonCards().getUniqueByName(name);
+                if (pc != null) {
+                    tgtCards.add(Card.fromPaperCard(pc, controller));
                 }
             } else if (sa.hasParam("Choices")) {
                 Player chooser = activator;
@@ -224,7 +213,7 @@ public class CopyPermanentEffect extends TokenEffectBase {
 
                             if (choosen != null) {
                                 tgtCards.add(choosen);
-                                choices = CardLists.filter(choices, Predicates.not(CardPredicates.sharesNameWith(choosen)));
+                                choices = CardLists.filter(choices, CardPredicates.sharesNameWith(choosen).negate());
                             } else if (chooser.getController().confirmAction(sa, PlayerActionConfirmMode.OptionalChoose, Localizer.getInstance().getMessage("lblCancelChooseConfirm"), null)) {
                                 break;
                             }
@@ -291,35 +280,30 @@ public class CopyPermanentEffect extends TokenEffectBase {
             String set = sa.getOriginalHost().getSetCode();
             copy.getCurrentState().setRarity(CardRarity.Token);
             copy.getCurrentState().setSetCode(set);
-            copy.getCurrentState().setImageKey(ImageKeys.getTokenKey(name + "_" + set.toLowerCase()));
+            copy.getCurrentState().setImageKey(StaticData.instance().getOtherImageKey(name, set));
         } else {
             final Card host = sa.getHostCard();
 
             int id = newOwner == null ? 0 : newOwner.getGame().nextCardId();
             // need to create a physical card first, i need the original card faces
             copy = CardFactory.getCard(original.getPaperCard(), newOwner, id, host.getGame());
+
+            copy.setStates(CardFactory.getCloneStates(original, copy, sa));
+            // force update the now set State
             if (original.isTransformable()) {
+                copy.setState(original.isTransformed() ? CardStateName.Backside : CardStateName.Original, true, true);
                 // 707.8a If an effect creates a token that is a copy of a transforming permanent or a transforming double-faced card not on the battlefield,
                 // the resulting token is a transforming token that has both a front face and a back face.
                 // The characteristics of each face are determined by the copiable values of the same face of the permanent it is a copy of, as modified by any other copy effects that apply to that permanent.
                 // If the token is a copy of a transforming permanent with its back face up, the token enters the battlefield with its back face up.
                 // This rule does not apply to tokens that are created with their own set of characteristics and enter the battlefield as a copy of a transforming permanent due to a replacement effect.
                 copy.setBackSide(original.isBackSide());
-                if (original.isTransformed()) {
-                    copy.incrementTransformedTimestamp();
-                }
-            }
-
-            copy.setStates(CardFactory.getCloneStates(original, copy, sa));
-            // force update the now set State
-            if (original.isTransformable()) {
-                copy.setState(original.isTransformed() ? CardStateName.Transformed : CardStateName.Original, true, true);
             } else {
                 copy.setState(copy.getCurrentStateName(), true, true);
             }
         }
         // spire
-        copy.setChosenColorID(original.getChosenColorID());
+        copy.setMarkedColors(original.getMarkedColors());
 
         copy.setTokenSpawningAbility(sa);
         copy.setGamePieceType(GamePieceType.TOKEN);

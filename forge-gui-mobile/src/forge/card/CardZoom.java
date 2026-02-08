@@ -219,7 +219,7 @@ public class CardZoom extends FOverlay {
         }
         if (item instanceof InventoryItem) {
             InventoryItem ii = (InventoryItem)item;
-            return new CardView(-1, null, ii.getName(), null, ii.getImageKey(false));
+            return new CardView(-1, null, ii.getDisplayName(), null, ii.getImageKey(false));
         }
         return new CardView(-1, null, item.toString());
     }
@@ -237,7 +237,7 @@ public class CardZoom extends FOverlay {
         }
         if (flipIconBounds != null && flipIconBounds.contains(x, y)) {
             if (currentCard.isFaceDown() && currentCard.getBackup() != null) {
-                if (currentCard.getBackup().hasBackSide() || currentCard.getBackup().isFlipCard() || currentCard.getBackup().isAdventureCard()) {
+                if (currentCard.getBackup().hasBackSide() || currentCard.getBackup().isFlipCard() || currentCard.getBackup().hasSecondaryState()) {
                     show(currentCard.getBackup());
                     return true;
                 }

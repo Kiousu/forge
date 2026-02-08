@@ -17,14 +17,9 @@
  */
 package forge.game.card;
 
-import java.util.List;
-import java.util.Set;
-
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-
 import forge.ImageKeys;
 import forge.card.CardStateName;
 import forge.card.CardType;
@@ -39,9 +34,14 @@ import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.spellability.SpellAbilityPredicates;
 import forge.game.spellability.TargetRestrictions;
+import forge.game.trigger.Trigger;
 import forge.game.zone.ZoneType;
 import forge.util.TextUtil;
 import forge.util.collect.FCollection;
+
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public final class CardUtil {
     // disable instantiation
@@ -60,20 +60,12 @@ public final class CardUtil {
             "Fortify", "Transfigure", "Champion", "Evoke", "Prowl", "Freerunning",
             "Reinforce", "Unearth", "Level up", "Miracle", "Overload", "Cleave",
             "Scavenge", "Encore", "Bestow", "Outlast", "Dash", "Surge", "Emerge", "Hexproof:",
-            "Bands with other",
+            "Bands with other", "Landwalk", "Offering",
             "etbCounter", "Reflect", "Ward").build();
-    /** List of keyword endings of keywords that could be modified by text changes. */
-    public static final ImmutableList<String> modifiableKeywordEndings = ImmutableList.<String>builder().add(
-            "walk", "cycling", "offering").build();
 
     public static boolean isKeywordModifiable(final String kw) {
         for (final String modKw : modifiableKeywords) {
             if (kw.startsWith(modKw)) {
-                return true;
-            }
-        }
-        for (final String end : modifiableKeywordEndings) {
-            if (kw.endsWith(end)) {
                 return true;
             }
         }
@@ -142,7 +134,9 @@ public final class CardUtil {
     }
 
     public static List<SpellAbility> getThisTurnActivated(final String valid, final Card src, final CardTraitBase ctb, final Player controller) {
-        return Lists.newArrayList(Iterables.filter(src.getGame().getStack().getAbilityActivatedThisTurn(), SpellAbilityPredicates.isValid(valid.split(","), controller, src, ctb)));
+        return src.getGame().getStack().getAbilityActivatedThisTurn().stream()
+                .filter(SpellAbilityPredicates.isValid(valid.split(","), controller, src, ctb))
+                .collect(Collectors.toList());
     }
 
     public static List<Card> getCastSinceBeginningOfYourLastTurn(final String valid, final Card src, final CardTraitBase ctb, final Player controller) {
@@ -311,29 +305,33 @@ public final class CardUtil {
         } else if (reflectProperty.equals("Produce")) {
             final FCollection<SpellAbility> abilities = new FCollection<>();
             for (final Card c : cards) {
-                abilities.addAll(c.getManaAbilities());
+                abilities.addAll(c.getSpellAbilities());
+                for (Trigger trig : c.getTriggers()) {
+                    abilities.add(trig.ensureAbility());
+                }
             }
 
             final List<SpellAbility> reflectAbilities = Lists.newArrayList();
 
             for (final SpellAbility ab : abilities) {
+                if (ab.isSpell() || ab.isLandAbility()) {
+                    continue;
+                }
                 if (maxChoices == colors.size()) {
                     break;
                 }
 
-                if (ab.getApi() == ApiType.ManaReflected) {
-                    if (!parents.contains(ab.getHostCard())) {
-                        // Recursion! Set Activator to controller for appropriate valid comparison
-                        ab.setActivatingPlayer(ab.getHostCard().getController());
-                        reflectAbilities.add(ab);
-                        parents.add(ab.getHostCard());
-                    }
-                    continue;
-                }
-                colors = canProduce(maxChoices, ab, colors);
                 if (!parents.contains(ab.getHostCard())) {
                     parents.add(ab.getHostCard());
                 }
+
+                // Recursion! Set Activator to controller for appropriate valid comparison
+                ab.setActivatingPlayer(ab.getHostCard().getController());
+                if (ab.getApi() == ApiType.ManaReflected && !"Produced".equals(ab.getParam("ReflectProperty"))) {
+                    reflectAbilities.add(ab);
+                    continue;
+                }
+                colors = canProduce(maxChoices, ab, colors);
             }
 
             for (final SpellAbility ab : reflectAbilities) {
@@ -375,8 +373,7 @@ public final class CardUtil {
         final Game game = ability.getActivatingPlayer().getGame();
         final List<ZoneType> zone = tgt.getZone();
 
-        List<Card> validCards = CardLists.getValidCards(game.getCardsIn(zone), tgt.getValidTgts(), ability.getActivatingPlayer(), activatingCard, ability);
-        List<Card> choices = CardLists.getTargetableCards(validCards, ability);
+        List<Card> choices = CardLists.getTargetableCards(game.getCardsIn(zone), ability);
         final boolean canTgtStack = zone.contains(ZoneType.Stack);
         if (canTgtStack) {
             // Since getTargetableCards doesn't have additional checks if one of the Zones is stack

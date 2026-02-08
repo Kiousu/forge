@@ -2,10 +2,9 @@
 Code=ORI
 Date=2015-07-17
 Name=Magic Origins
-Code2=ORI
 Type=Core
 BoosterCovers=5
-Booster=10 Common:!fromSheet("ORI Sample Cards"), 3 Uncommon:!fromSheet("ORI Sample Cards"), 1 RareMythic:!fromSheet("ORI Sample Cards"), 1 BasicLand
+Booster=10 Common:fromSheet("ORI cards"), 3 Uncommon:fromSheet("ORI cards"), 1 RareMythic:fromSheet("ORI cards"), 1 BasicLand
 FatPack=9
 FatPackExtraSlots=80 BasicLands
 ChaosDraftThemes=CORE_SET
@@ -284,6 +283,8 @@ ScryfallCode=ORI
 270 L Forest @Jonas De Ro
 271 L Forest @Jonas De Ro
 272 L Forest @Vincent Proce
+
+[precon product]
 273 R Aegis Angel @Aleksi Briclot
 274 C Divine Verdict @Kev Walker
 275 C Eagle of the Watch @Scott Murphy
@@ -302,14 +303,19 @@ ScryfallCode=ORI
 288 R Terra Stomper @Goran Josic
 
 [tokens]
-ashaya_the_awoken_world
-w_4_4_angel_flying
-w_2_2_knight_vigilance
-w_1_1_soldier
-b_5_5_demon_flying
-b_2_2_zombie
-r_1_1_goblin
-g_2_2_elemental
-g_1_1_elf_warrior
-c_1_1_a_thopter_flying
-c_1_1_a_thopter_flying
+1 w_4_4_angel_flying @Cyril Van Der Haegen
+2 w_2_2_knight_vigilance @Matt Stewart
+3 w_1_1_soldier @Steve Prescott
+4 b_5_5_demon_flying @Kev Walker
+5 b_2_2_zombie @Lucas Graciano
+6 r_1_1_goblin @Brandon Kitkouski
+7 ashaya_the_awoken_world @Raymond Swanland
+8 g_2_2_elemental @Marco Nelor
+9 g_1_1_elf_warrior @William O'Connor
+10 c_1_1_a_thopter_flying @Adam Paquette
+11 c_1_1_a_thopter_flying @Svetlin Velinov
+
+[other]
+12 emblem_jace_telepath_unbound @Jaime Jones
+13 emblem_liliana_defiant_necromancer @Karla Ortiz
+14 emblem_chandra_roaring_flame @Eric Deschamps

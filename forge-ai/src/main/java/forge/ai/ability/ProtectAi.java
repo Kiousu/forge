@@ -1,14 +1,6 @@
 package forge.ai.ability;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import forge.ai.AiAttackController;
-import forge.ai.ComputerUtil;
-import forge.ai.ComputerUtilCard;
-import forge.ai.ComputerUtilCombat;
-import forge.ai.ComputerUtilCost;
-import forge.ai.SpellAbilityAi;
+import forge.ai.*;
 import forge.card.MagicColor;
 import forge.game.Game;
 import forge.game.GameObject;
@@ -26,6 +18,9 @@ import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.spellability.TargetRestrictions;
 import forge.util.MyRandom;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class ProtectAi extends SpellAbilityAi {
     private static boolean hasProtectionFrom(final Card card, final String color) {
@@ -162,17 +157,21 @@ public class ProtectAi extends SpellAbilityAi {
     }
     
     @Override
-    protected boolean checkApiLogic(final Player ai, final SpellAbility sa) {
+    protected AiAbilityDecision checkApiLogic(final Player ai, final SpellAbility sa) {
         if (sa.usesTargeting()) {
             return protectTgtAI(ai, sa, false);
         }
 
         final List<Card> cards = AbilityUtils.getDefinedCards(sa.getHostCard(), sa.getParam("Defined"), sa);
-        if (cards.size() == 0) {
-            return false;
+        if (cards.isEmpty()) {
+            return new AiAbilityDecision(0, AiPlayDecision.MissingNeededCards);
         } else if (cards.size() == 1) {
             // Affecting single card
-            return getProtectCreatures(ai, sa).contains(cards.get(0));
+            if (getProtectCreatures(ai, sa).contains(cards.get(0))) {
+                return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
+            } else {
+                return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
+            }
         }
         /*
          * when this happens we need to expand AI to consider if its ok
@@ -180,14 +179,14 @@ public class ProtectAi extends SpellAbilityAi {
          * control Card and Pump is a Curse, than maybe use?
          * }
          */
-        return false;
+        return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
     }
 
-    private boolean protectTgtAI(final Player ai, final SpellAbility sa, final boolean mandatory) {
+    private AiAbilityDecision protectTgtAI(final Player ai, final SpellAbility sa, final boolean mandatory) {
         final Game game = ai.getGame();
         if (!mandatory && game.getPhaseHandler().getPhase().isAfter(PhaseType.COMBAT_DECLARE_BLOCKERS) 
         		&& game.getStack().isEmpty()) {
-            return false;
+            return new AiAbilityDecision(0, AiPlayDecision.WaitForCombat);
         }
 
         final Card source = sa.getHostCard();
@@ -221,7 +220,12 @@ public class ProtectAi extends SpellAbilityAi {
         }
 
         if (list.isEmpty()) {
-            return mandatory && protectMandatoryTarget(ai, sa);
+            if (mandatory && protectMandatoryTarget(ai, sa)) {
+                return new AiAbilityDecision(50, AiPlayDecision.MandatoryPlay);
+            } else {
+                sa.resetTargets();
+                return new AiAbilityDecision(0, AiPlayDecision.TargetingFailed);
+            }
         }
 
         while (sa.canAddMoreTarget()) {
@@ -231,11 +235,13 @@ public class ProtectAi extends SpellAbilityAi {
             if (list.isEmpty()) {
                 if ((sa.getTargets().size() < tgt.getMinTargets(source, sa)) || sa.getTargets().size() == 0) {
                     if (mandatory) {
-                        return protectMandatoryTarget(ai, sa);
+                        if (protectMandatoryTarget(ai, sa)) {
+                            return new AiAbilityDecision(50, AiPlayDecision.MandatoryPlay);
+                        }
                     }
 
                     sa.resetTargets();
-                    return false;
+                    return new AiAbilityDecision(0, AiPlayDecision.TargetingFailed);
                 } else {
                     // TODO is this good enough? for up to amounts?
                     break;
@@ -247,7 +253,7 @@ public class ProtectAi extends SpellAbilityAi {
             list.remove(t);
         }
 
-        return true;
+        return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
     } // protectTgtAI()
 
     private static boolean protectMandatoryTarget(final Player ai, final SpellAbility sa) {
@@ -310,25 +316,25 @@ public class ProtectAi extends SpellAbilityAi {
     } // protectMandatoryTarget()
 
     @Override
-    protected boolean doTriggerAINoCost(Player ai, SpellAbility sa, boolean mandatory) {
+    protected AiAbilityDecision doTriggerNoCost(Player ai, SpellAbility sa, boolean mandatory) {
         if (!sa.usesTargeting()) {
             if (mandatory) {
-                return true;
+                return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
             }
         } else {
             return protectTgtAI(ai, sa, mandatory);
         }
 
-        return true;
+        return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
     } // protectTriggerAI
 
     @Override
-    public boolean chkAIDrawback(SpellAbility sa, Player ai) {
+    public AiAbilityDecision chkDrawback(Player ai, SpellAbility sa) {
         if (sa.usesTargeting()) {
             return protectTgtAI(ai, sa, false);
         }
 
-        return true;
+        return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
     } // protectDrawbackAI()
 
 }

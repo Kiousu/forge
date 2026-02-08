@@ -1,13 +1,13 @@
 package forge.util;
 
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
-
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.tuple.Pair;
 
 public class CardTranslation {
 
@@ -256,6 +256,10 @@ public class CardTranslation {
             translations.put("altoracle", getTranslatedOracle(cardOther));
         }
         return translations;
+    }
+
+    public static String getLanguageSelected() {
+        return languageSelected;
     }
 
     private static boolean needsTranslation() {

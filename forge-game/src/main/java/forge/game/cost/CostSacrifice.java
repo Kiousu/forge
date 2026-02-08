@@ -18,13 +18,6 @@
 package forge.game.cost;
 
 import forge.card.CardType;
-
-import java.util.Map;
-import java.util.Set;
-
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Sets;
-
 import forge.game.Game;
 import forge.game.ability.AbilityKey;
 import forge.game.card.Card;
@@ -35,6 +28,8 @@ import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import forge.util.Lang;
+
+import java.util.Map;
 
 /**
  * The Class CostSacrifice.
@@ -72,19 +67,12 @@ public class CostSacrifice extends CostPartWithList {
         }
 
         CardCollectionView typeList = payer.getCardsIn(ZoneType.Battlefield);
-        typeList = CardLists.getValidCards(typeList, type.split(";"), payer, source, ability);
+        if (!type.contains("X")) {
+            typeList = CardLists.getValidCards(typeList, type.split(";"), payer, source, ability);
+        }
         typeList = CardLists.filter(typeList, CardPredicates.canBeSacrificedBy(ability, effect));
         if (differentNames) {
-            // TODO rewrite with sharesName to respect Spy Kit
-            final Set<String> crdname = Sets.newHashSet();
-            for (final Card card : typeList) {
-                String name = card.getName();
-                // CR 201.2b Those objects have different names only if each of them has at least one name and no two objects in that group have a name in common
-                if (!card.hasNoName()) {
-                    crdname.add(name);
-                }
-            }
-            return crdname.size();
+            return CardLists.getDifferentNamesCount(typeList);
         }
         return typeList.size();
     }
@@ -150,7 +138,7 @@ public class CostSacrifice extends CostPartWithList {
             CardCollectionView typeList = activator.getCardsIn(ZoneType.Battlefield);
             typeList = CardLists.getValidCards(typeList, getType().split(";"), activator, source, ability);
             // it needs to check if everything can be sacrificed
-            return Iterables.all(typeList, CardPredicates.canBeSacrificedBy(ability, effect));
+            return typeList.allMatch(CardPredicates.canBeSacrificedBy(ability, effect));
         }
 
         int amount = getAbilityAmount(ability);

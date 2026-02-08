@@ -15,7 +15,7 @@ public class KeywordCollection implements Iterable<KeywordInterface> {
     private transient KeywordCollectionView view;
     // don't use enumKeys it causes a slow down
     private final Multimap<Keyword, KeywordInterface> map = MultimapBuilder.hashKeys()
-            .arrayListValues().build();
+            .linkedHashSetValues().build();
 
     public KeywordCollection() {
         super();
@@ -56,7 +56,6 @@ public class KeywordCollection implements Iterable<KeywordInterface> {
             return true;
         }
         return false;
-
     }
 
     public void addAll(Iterable<String> keywords) {
@@ -181,20 +180,9 @@ public class KeywordCollection implements Iterable<KeywordInterface> {
         return view;
     }
 
-    public void applyChanges(Iterable<KeywordsChange> changes) {
-        for (final KeywordsChange ck : changes) {
-            if (ck.isRemoveAllKeywords()) {
-                clear();
-            }
-            else if (ck.getRemoveKeywords() != null) {
-                removeAll(ck.getRemoveKeywords());
-            }
-
-            removeInstances(ck.getRemovedKeywordInstances());
-
-            if (ck.getKeywords() != null) {
-                insertAll(ck.getKeywords());
-            }
+    public void applyChanges(Iterable<IKeywordsChange> changes) {
+        for (final IKeywordsChange ck : changes) {
+            ck.applyKeywords(this);
         }
     }
 

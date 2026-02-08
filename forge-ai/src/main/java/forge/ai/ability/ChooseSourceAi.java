@@ -1,15 +1,7 @@
 package forge.ai.ability;
 
-import java.util.List;
-import java.util.Map;
-
-import com.google.common.base.Predicates;
 import com.google.common.collect.Iterables;
-
-import forge.ai.AiAttackController;
-import forge.ai.ComputerUtilCard;
-import forge.ai.ComputerUtilCombat;
-import forge.ai.SpellAbilityAi;
+import forge.ai.*;
 import forge.game.Game;
 import forge.game.GameObject;
 import forge.game.ability.AbilityUtils;
@@ -19,7 +11,6 @@ import forge.game.card.CardCollectionView;
 import forge.game.card.CardLists;
 import forge.game.card.CardPredicates;
 import forge.game.combat.Combat;
-import forge.game.cost.Cost;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
@@ -27,27 +18,23 @@ import forge.game.spellability.SpellAbilityStackInstance;
 import forge.game.zone.ZoneType;
 import forge.util.Aggregates;
 
+import java.util.List;
+import java.util.Map;
+import java.util.function.Predicate;
+
 public class ChooseSourceAi extends SpellAbilityAi {
 
     /* (non-Javadoc)
      * @see forge.card.abilityfactory.SpellAiLogic#canPlayAI(forge.game.player.Player, java.util.Map, forge.card.spellability.SpellAbility)
      */
     @Override
-    protected boolean canPlayAI(final Player ai, SpellAbility sa) {
+    protected AiAbilityDecision checkApiLogic(final Player ai, SpellAbility sa) {
         // TODO: AI Support! Currently this is copied from AF ChooseCard.
         //       When implementing AI, I believe AI also needs to be made aware of the damage sources chosen
         //       to be prevented (e.g. so the AI doesn't attack with a creature that will not deal any damage
         //       to the player because a CoP was pre-activated on it - unless, of course, there's another
         //       possible reason to attack with that creature).
         final Card host = sa.getHostCard();
-        final Cost abCost = sa.getPayCosts();
-        final Card source = sa.getHostCard();
-
-        if (abCost != null) {
-            if (!willPayCosts(ai, sa, abCost, source)) {
-                return false;
-            }
-        }
 
         if (sa.usesTargeting()) {
             sa.resetTargets();
@@ -55,7 +42,7 @@ public class ChooseSourceAi extends SpellAbilityAi {
             if (sa.canTarget(opp)) {
                 sa.getTargets().add(opp);
             } else {
-                return false;
+                return new AiAbilityDecision(0, AiPlayDecision.TargetingFailed);
             }
         }
         if (sa.hasParam("AILogic")) {
@@ -64,11 +51,11 @@ public class ChooseSourceAi extends SpellAbilityAi {
                 if (!game.getStack().isEmpty()) {
                     final SpellAbility topStack = game.getStack().peekAbility();
                     if (sa.hasParam("Choices") && !topStack.matchesValid(topStack.getHostCard(), sa.getParam("Choices").split(","))) {
-                        return false;
+                        return new AiAbilityDecision(0, AiPlayDecision.TargetingFailed);
                     }
                     final ApiType threatApi = topStack.getApi();
                     if (threatApi != ApiType.DealDamage && threatApi != ApiType.DamageAll) {
-                        return false;
+                        return new AiAbilityDecision(0, AiPlayDecision.TargetingFailed);
                     }
 
                     final Card threatSource = topStack.getHostCard();
@@ -80,13 +67,17 @@ public class ChooseSourceAi extends SpellAbilityAi {
                     }
 
                     if (!objects.contains(ai) || topStack.hasParam("NoPrevention")) {
-                        return false;
+                        return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
                     }
                     int dmg = AbilityUtils.calculateAmount(threatSource, topStack.getParam("NumDmg"), topStack);
-                    return ComputerUtilCombat.predictDamageTo(ai, dmg, threatSource, false) > 0;
+                    if (ComputerUtilCombat.predictDamageTo(ai, dmg, threatSource, false) > 0) {
+                        return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
+                    } else {
+                        return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
+                    }
                 }
                 if (game.getPhaseHandler().getPhase() != PhaseType.COMBAT_DECLARE_BLOCKERS) {
-                    return false;
+                    return new AiAbilityDecision(0, AiPlayDecision.AnotherTime);
                 }
                 CardCollectionView choices = game.getCardsIn(ZoneType.Battlefield);
                 if (sa.hasParam("Choices")) {
@@ -99,11 +90,13 @@ public class ChooseSourceAi extends SpellAbilityAi {
                     }
                     return ComputerUtilCombat.damageIfUnblocked(c, ai, combat, true) > 0;
                 });
-                return !choices.isEmpty();
+                if (choices.isEmpty()) {
+                    return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
+                }
             }
         }
 
-        return true;
+        return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
     }
 
     @Override
@@ -135,10 +128,14 @@ public class ChooseSourceAi extends SpellAbilityAi {
             }
             // No optimal creature was found above, so try to broaden the choice.
             if (!Iterables.isEmpty(options)) {
-                List<Card> oppCreatures = CardLists.filter(options, Predicates.and(CardPredicates.Presets.CREATURES,
-                        Predicates.not(CardPredicates.isOwner(aiChoser))));
-                List<Card> aiNonCreatures = CardLists.filter(options, Predicates.and(Predicates.not(CardPredicates.Presets.CREATURES),
-                        CardPredicates.Presets.PERMANENTS, CardPredicates.isOwner(aiChoser)));
+                List<Card> oppCreatures = CardLists.filter(options, Predicate.not(
+                        CardPredicates.CREATURES.and(CardPredicates.isOwner(aiChoser))
+                ));
+                List<Card> aiNonCreatures = CardLists.filter(options,
+                        CardPredicates.NON_CREATURES
+                                .and(CardPredicates.PERMANENTS)
+                                .and(CardPredicates.isOwner(aiChoser))
+                );
 
                 if (!oppCreatures.isEmpty()) {
                     return ComputerUtilCard.getBestCreatureAI(oppCreatures);

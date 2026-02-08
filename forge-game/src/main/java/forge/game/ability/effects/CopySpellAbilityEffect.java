@@ -1,7 +1,6 @@
 package forge.game.ability.effects;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import forge.game.Game;
 import forge.game.GameEntity;
@@ -14,11 +13,8 @@ import forge.game.card.CardFactory;
 import forge.game.player.Player;
 import forge.game.replacement.ReplacementType;
 import forge.game.spellability.SpellAbility;
-import forge.game.staticability.StaticAbilityCantBeCopied;
 import forge.game.zone.ZoneType;
-import forge.util.CardTranslation;
-import forge.util.Lang;
-import forge.util.Localizer;
+import forge.util.*;
 import forge.util.collect.FCollection;
 
 import java.util.Iterator;
@@ -27,6 +23,12 @@ import java.util.Map;
 
 
 public class CopySpellAbilityEffect extends SpellAbilityEffect {
+    @Override
+    public void buildSpellAbility(SpellAbility sa) {
+        if (sa.usesTargeting()) {
+            sa.getTargetRestrictions().setZone(ZoneType.Stack);
+        }
+    }
 
     @Override
     protected String getStackDescription(SpellAbility sa) {
@@ -69,16 +71,13 @@ public class CopySpellAbilityEffect extends SpellAbilityEffect {
 
         List<SpellAbility> tgtSpells = getTargetSpells(sa);
 
-        tgtSpells.removeIf(tgtSA -> StaticAbilityCantBeCopied.cantBeCopied(tgtSA.getHostCard()));
+        tgtSpells.removeIf(SpellAbility::cantBeCopied);
 
         if (tgtSpells.isEmpty() || amount == 0) {
             return;
         }
 
-        List<Player> controllers = Lists.newArrayList(sa.getActivatingPlayer());
-        if (sa.hasParam("Controller")) {
-            controllers = AbilityUtils.getDefinedPlayers(card, sa.getParam("Controller"), sa);
-        }
+        List<Player> controllers = AbilityUtils.getDefinedPlayers(card, sa.getParam("Controller"), sa);
 
         boolean isOptional = sa.hasParam("Optional");
 
@@ -93,7 +92,7 @@ public class CopySpellAbilityEffect extends SpellAbilityEffect {
             }
 
             for (SpellAbility chosenSA : copySpells) {
-                if (isOptional && !controller.getController().confirmAction(sa, null, Localizer.getInstance().getMessage("lblDoyouWantCopyTheSpell", CardTranslation.getTranslatedName(chosenSA.getHostCard().getName())), null)) {
+                if (isOptional && !controller.getController().confirmAction(sa, null, Localizer.getInstance().getMessage("lblDoyouWantCopyTheSpell", chosenSA.getHostCard().getTranslatedName()), null)) {
                     continue;
                 }
 
@@ -104,7 +103,7 @@ public class CopySpellAbilityEffect extends SpellAbilityEffect {
                         continue;
                     }
 
-                    FCollection<GameEntity> all = new FCollection<>(Iterables.filter(targetedSA.getTargetRestrictions().getAllCandidates(targetedSA, true), GameObjectPredicates.restriction(sa.getParam("CopyForEachCanTarget").split(","), sa.getActivatingPlayer(), card, sa)));
+                    FCollection<GameEntity> all = new FCollection<>(IterableUtil.filter(targetedSA.getTargetRestrictions().getAllCandidates(targetedSA, true), GameObjectPredicates.restriction(sa.getParam("CopyForEachCanTarget").split(","), sa.getActivatingPlayer(), card, sa)));
                     // Remove targeted players because getAllCandidates include all the valid players
                     all.removeAll(getTargetPlayers(targetedSA));
 

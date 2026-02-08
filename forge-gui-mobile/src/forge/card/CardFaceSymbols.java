@@ -140,7 +140,7 @@ public class CardFaceSymbols {
         Forge.getAssets().symbolLookup().put("TK", FSkinImage.TICKET);
         Forge.getAssets().symbolLookup().put("AE", FSkinImage.AETHER_SHARD);
         Forge.getAssets().symbolLookup().put("PW", FSkinImage.PW_BADGE_COMMON);
-        Forge.getAssets().symbolLookup().put("CR", FSkinImage.QUEST_COINSTACK);
+        Forge.getAssets().symbolLookup().put("CS", FSkinImage.QUEST_COINSTACK);
         Forge.getAssets().symbolLookup().put("M", FSkinImage.MANASHARD);
     }
 
@@ -186,8 +186,8 @@ public class CardFaceSymbols {
     public static void drawColorSet(Graphics g, ColorSet colorSet, float x, float y, final float imageSize, boolean vertical) {
         final float dx = imageSize;
 
-        for (final ManaCostShard s : colorSet.getOrderedShards()) {
-            drawSymbol(s.getImageKey(), g, x, y, imageSize, imageSize);
+        for (final MagicColor.Color s : colorSet.getOrderedColors()) {
+            drawSymbol(s.getShortName(), g, x, y, imageSize, imageSize);
             if (!vertical)
                 x += dx;
             else

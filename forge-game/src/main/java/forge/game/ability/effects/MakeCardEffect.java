@@ -3,6 +3,7 @@ package forge.game.ability.effects;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import forge.StaticData;
+import forge.card.CardEdition;
 import forge.card.ICardFace;
 import forge.game.Game;
 import forge.game.GameEntityCounterTable;
@@ -15,13 +16,8 @@ import forge.game.player.PlayerCollection;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.TriggerType;
 import forge.game.zone.ZoneType;
-import forge.item.BoosterPack;
-import forge.item.IPaperCard;
-import forge.item.PaperCard;
-import forge.item.SealedTemplate;
-import forge.util.Aggregates;
-import forge.util.CardTranslation;
-import forge.util.Localizer;
+import forge.item.*;
+import forge.util.*;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -55,7 +51,7 @@ public class MakeCardEffect extends SpellAbilityEffect {
                     if (source.hasNamedCard()) {
                         names.addAll(source.getNamedCards());
                     } else {
-                        System.err.println("Malformed MakeCard entry! - " + source.toString());
+                        System.err.println("Malformed MakeCard entry! - " + source);
                     }
                 } else {
                     names.add(n);
@@ -76,7 +72,8 @@ public class MakeCardEffect extends SpellAbilityEffect {
                     cards = AbilityUtils.getDefinedCards(source, def, sa);
                 }
                 for (final Card c : cards) {
-                    names.add(c.getName());
+                    //get the original papercard name
+                    names.add(c.getPaperCard().getName());
                 }
             } else if (sa.hasParam("Spellbook")) {
                 faces.addAll(parseFaces(sa, "Spellbook"));
@@ -112,7 +109,7 @@ public class MakeCardEffect extends SpellAbilityEffect {
                         chosen = Aggregates.random(faces).getName();
                     } else {
                         final String sbName = sa.hasParam("SpellbookName") ? sa.getParam("SpellbookName") :
-                                CardTranslation.getTranslatedName(source.getName());
+                                source.getTranslatedName();
                         final String message = sa.hasParam("Choices") ? 
                             Localizer.getInstance().getMessage("lblChooseaCard") :
                             Localizer.getInstance().getMessage("lblChooseFromSpellbook", sbName);
@@ -153,9 +150,11 @@ public class MakeCardEffect extends SpellAbilityEffect {
                     while (toMake > 0) {
                         PaperCard pc;
                         if (pack != null) {
-                            pc = Iterables.getLast(Iterables.filter(pack, IPaperCard.Predicates.name(name)));
+                            pc = Iterables.getLast(IterableUtil.filter(pack, PaperCardPredicates.name(name)));
                         } else {
-                            pc = StaticData.instance().getCommonCards().getUniqueByName(name);
+                            // Try to get the card in the sa host's current edition
+                            String editionCode = sa.getHostCard() != null ? sa.getHostCard().getSetCode() : CardEdition.UNKNOWN_CODE;
+                            pc = StaticData.instance().getCommonCards().getCard(name, editionCode);
                         }
                         Card card = Card.fromPaperCard(pc, player);
 
@@ -188,7 +187,7 @@ public class MakeCardEffect extends SpellAbilityEffect {
                         Card cc;
                         if (c.getZone().getZoneType().equals(ZoneType.None)) cc = c;
                         else { // make another copy
-                            PaperCard next = StaticData.instance().getCommonCards().getUniqueByName(c.getName());
+                            PaperCard next = StaticData.instance().getCommonCards().getCard(c.getName(), c.getSetCode());
                             cc = Card.fromPaperCard(next, player);
                             game.getAction().moveTo(ZoneType.None, cc, sa, moveParams);
                         }

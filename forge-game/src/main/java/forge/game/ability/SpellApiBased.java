@@ -4,7 +4,6 @@ import java.util.Map;
 
 import forge.game.card.Card;
 import forge.game.cost.Cost;
-import forge.game.spellability.AbilityManaPart;
 import forge.game.spellability.Spell;
 import forge.game.spellability.TargetRestrictions;
 
@@ -24,18 +23,12 @@ public class SpellApiBased extends Spell {
         // A spell is always intrinsic
         this.setIntrinsic(true);
 
-        if (api.equals(ApiType.Mana) || api.equals(ApiType.ManaReflected)) {
-            this.setManaPart(new AbilityManaPart(this, mapParams));
-        }
-
-        if (api.equals(ApiType.ChangeZone) || api.equals(ApiType.ChangeZoneAll)) {
-            AbilityFactory.adjustChangeZoneTarget(mapParams, this);
-        }
+        effect.buildSpellAbility(this);
     }
 
     @Override
     public String getStackDescription() {
-        // prefer setted stack Description if able 
+        // prefer set stack Description if able 
         final String result = super.getStackDescription();
         if (result.isEmpty()) {
             return effect.getStackDescriptionWithSubs(mapParams, this);

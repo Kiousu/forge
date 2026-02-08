@@ -3,8 +3,10 @@ package forge.toolbox;
 import static forge.card.CardRenderer.MANA_SYMBOL_SIZE;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.utils.Align;
@@ -21,10 +23,11 @@ import forge.assets.TextRenderer;
 import forge.card.CardFaceSymbols;
 import forge.card.CardRenderer;
 import forge.card.CardRenderer.CardStackPosition;
+import forge.card.CardType;
 import forge.card.CardZoom;
 import forge.card.CardZoom.ActivateHandler;
+import forge.card.MagicColor;
 import forge.card.mana.ManaCost;
-import forge.card.mana.ManaCostParser;
 import forge.game.card.CardView;
 import forge.game.card.IHasCardView;
 import forge.game.keyword.Keyword;
@@ -40,6 +43,7 @@ import forge.localinstance.skin.IHasSkinProp;
 import forge.screens.match.MatchController;
 import forge.screens.match.views.VAvatar;
 import forge.screens.match.views.VStack;
+import forge.util.CardRendererUtils;
 import forge.util.TextUtil;
 import forge.util.Utils;
 
@@ -103,6 +107,12 @@ public class FChoiceList<T> extends FList<T> implements ActivateHandler {
             renderer = new IHasCardViewItemRenderer();
         } else if (item instanceof PlayerView) {
             renderer = new PlayerItemRenderer();
+        } else if (item instanceof MagicColor.Color) {
+            renderer = new MagicColorRenderer();
+        } else if (item instanceof CardType.CoreType) {
+            renderer = new CoreTypeRenderer();
+        } else if (item instanceof CardType.Supertype) {
+            renderer = new SuperTypeRenderer();
         } else if (item instanceof Integer || item == FilterOperator.EQUALS) { //allow numeric operators to be selected horizontally
             renderer = new NumberRenderer();
         } else if (item instanceof IHasSkinProp) {
@@ -271,6 +281,14 @@ public class FChoiceList<T> extends FList<T> implements ActivateHandler {
         setSelectedIndex(getIndexOf(choice));
     }
 
+    public void setSelectedItems(Collection<T> items) {
+        selectedIndices.clear();
+        items.stream().mapToInt(this::getIndexOf).filter(i -> i >= 0).forEach(selectedIndices::add);
+        if(!items.isEmpty())
+            scrollIntoView(getIndexOf(items.iterator().next()));
+        onSelectionChange();
+    }
+
     protected String getChoiceText(T choice) {
         return choice.toString();
     }
@@ -393,7 +411,7 @@ public class FChoiceList<T> extends FList<T> implements ActivateHandler {
                 String title = value.toString().substring(0, manaStringindex - 1); //support ability/name with spaces...
                 String cost = TextUtil.fastReplace(value.toString().substring(manaStringindex), "}{", " ");
                 cost = TextUtil.fastReplace(TextUtil.fastReplace(cost, "{", ""), "}", "");
-                ManaCost manaCost = new ManaCost(new ManaCostParser(cost));
+                ManaCost manaCost = new ManaCost(cost);
                 CardFaceSymbols.drawManaCost(g, manaCost, x + font.getBounds(title).width, y + (h - MANA_SYMBOL_SIZE) / 2, MANA_SYMBOL_SIZE);
                 g.drawText(title, font, foreColor, x, y, w, h, allowDefaultItemWrap(), Align.left, true);
             } else {
@@ -429,33 +447,6 @@ public class FChoiceList<T> extends FList<T> implements ActivateHandler {
         public void drawValue(Graphics g, T value, FSkinFont font, FSkinColor foreColor, boolean pressed, float x, float y, float w, float h) {
             g.drawText(getChoiceText(value), font, foreColor, x, y, w, h, false, Align.center, true);
         }
-    }
-
-    //simple check for cardview needed on some special renderer for cards
-    private boolean showAlternate(CardView cardView, String value) {
-        if (cardView == null)
-            return false;
-        if (cardView.isFaceDown())
-            return false;
-        boolean showAlt = false;
-        if (cardView.hasAlternateState()) {
-            if (cardView.hasBackSide())
-                showAlt = value.contains(cardView.getBackSideName()) || cardView.getAlternateState().getAbilityText().contains(value);
-            else if (cardView.isAdventureCard())
-                showAlt = value.equals(cardView.getAlternateState().getAbilityText());
-            else if (cardView.isSplitCard()) {
-                //special case if aftermath cards can be cast from graveyard like yawgmoths will, you will have choices
-                if (cardView.getAlternateState().getOracleText().contains("Aftermath"))
-                    showAlt = cardView.getAlternateState().getOracleText().contains(value);
-                else {
-                    if (cardView.isRoom()) // special case for room cards
-                        showAlt = cardView.getAlternateState().getName().equalsIgnoreCase(value);
-                    else
-                        showAlt = value.equals(cardView.getAlternateState().getAbilityText());
-                }
-            }
-        }
-        return showAlt;
     }
 
     //special renderer for cards
@@ -566,7 +557,7 @@ public class FChoiceList<T> extends FList<T> implements ActivateHandler {
                         }
                     }
                     CardView cv = ((IHasCardView) value).getCardView();
-                    CardZoom.show(cv, showAlternate(cv, value.toString()));
+                    CardZoom.show(cv, CardRendererUtils.canShowAlternate(cv, value.toString()));
                 } catch (Exception ignored) {
                     //fixme: java.lang.ClassCastException for cards like Subtlety which should be cancelable instead...
                 }
@@ -586,7 +577,7 @@ public class FChoiceList<T> extends FList<T> implements ActivateHandler {
                     }
                 }
                 CardView cv = ((IHasCardView) value).getCardView();
-                CardZoom.show(cv, showAlternate(cv, value.toString()));
+                CardZoom.show(cv, CardRendererUtils.canShowAlternate(cv, value.toString()));
             } catch (Exception ignored) {
                 //fixme: java.lang.ClassCastException for cards like Subtlety which should be cancelable instead...
             }
@@ -603,7 +594,7 @@ public class FChoiceList<T> extends FList<T> implements ActivateHandler {
                     if (morph != null) {
                         g.drawImage(morph, x, y, VStack.CARD_WIDTH, VStack.CARD_HEIGHT);
                     } else if (cv != null) {
-                        boolean showAlternate = showAlternate(cv, value.toString());
+                        boolean showAlternate = CardRendererUtils.canShowAlternate(cv, value.toString());
                         if (!cv.isFaceDown())
                             CardRenderer.drawCardWithOverlays(g, cv, x, y, VStack.CARD_WIDTH, VStack.CARD_HEIGHT, CardStackPosition.Top, false, showAlternate, true);
                         else
@@ -611,7 +602,7 @@ public class FChoiceList<T> extends FList<T> implements ActivateHandler {
                     }
                 } else {
                     if (cv != null) {
-                        boolean showAlternate = showAlternate(cv, value.toString());
+                        boolean showAlternate = CardRendererUtils.canShowAlternate(cv, value.toString());
                         if (!cv.isFaceDown())
                             CardRenderer.drawCardWithOverlays(g, cv, x, y, VStack.CARD_WIDTH, VStack.CARD_HEIGHT, CardStackPosition.Top, false, showAlternate, true);
                         else
@@ -666,12 +657,19 @@ public class FChoiceList<T> extends FList<T> implements ActivateHandler {
         }
     }
 
-    protected class IHasSkinPropRenderer extends DefaultItemRenderer {
+    protected class AbstractIHasSkinPropRenderer extends DefaultItemRenderer {
         private final TextRenderer textRenderer = new TextRenderer(true);
+        private final Function<T, String> displayFunction;
+        private final Function<T, FSkinProp> skinFunction;
+
+        public AbstractIHasSkinPropRenderer(Function<T, String> displayFunction, Function<T, FSkinProp> skinFunction) {
+            this.displayFunction = displayFunction;
+            this.skinFunction = skinFunction;
+        }
 
         @Override
         public void drawValue(Graphics g, T value, FSkinFont font, FSkinColor foreColor, boolean pressed, float x, float y, float w, float h) {
-            FSkinProp skinProp = ((IHasSkinProp) value).getSkinProp();
+            FSkinProp skinProp = skinFunction.apply(value);
             if (skinProp != null) {
                 float iconSize = h * 0.8f;
                 float offset = (h - iconSize) / 2;
@@ -682,7 +680,31 @@ public class FChoiceList<T> extends FList<T> implements ActivateHandler {
                 x += dx;
                 w -= dx;
             }
-            textRenderer.drawText(g, value.toString(), font, foreColor, x, y, w, h, y, h, true, Align.left, true);
+            textRenderer.drawText(g, displayFunction.apply(value), font, foreColor, x, y, w, h, y, h, true, Align.left, true);
+        }
+    }
+
+    protected class IHasSkinPropRenderer extends AbstractIHasSkinPropRenderer {
+        public IHasSkinPropRenderer() {
+            super(v -> v.toString(), v -> ((IHasSkinProp)v).getSkinProp());
+        }
+    }
+
+    protected class MagicColorRenderer extends AbstractIHasSkinPropRenderer {
+        public MagicColorRenderer() {
+            super(v -> ((MagicColor.Color)v).getTranslatedName(), v -> FSkinProp.iconFromColor((MagicColor.Color)v));
+        }
+    }
+
+    protected class CoreTypeRenderer extends AbstractIHasSkinPropRenderer {
+        public CoreTypeRenderer() {
+            super(v -> ((CardType.CoreType)v).getTranslatedName(), v -> FSkinProp.iconFromCoreType((CardType.CoreType)v));
+        }
+    }
+
+    protected class SuperTypeRenderer extends AbstractIHasSkinPropRenderer {
+        public SuperTypeRenderer() {
+            super(v -> ((CardType.Supertype)v).getTranslatedName(), v -> null);
         }
     }
 

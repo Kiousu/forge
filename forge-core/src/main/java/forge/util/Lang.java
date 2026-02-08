@@ -1,22 +1,17 @@
 package forge.util;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.regex.Pattern;
-
-import org.apache.commons.lang3.StringUtils;
-
-import com.google.common.base.Function;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 
-import forge.util.lang.LangChinese;
-import forge.util.lang.LangEnglish;
-import forge.util.lang.LangGerman;
-import forge.util.lang.LangItalian;
-import forge.util.lang.LangJapanese;
-import forge.util.lang.LangSpanish;
-import forge.util.lang.LangFrench;
+import forge.card.CardType;
+import forge.util.lang.*;
+import org.apache.commons.lang3.StringUtils;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.function.Function;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Static library containing language-related utility methods.
@@ -223,5 +218,20 @@ public abstract class Lang {
             return name.split(":")[0];
         }
         return name.split(" ")[0];
+    }
+
+    public String buildValidDesc(Collection<String> valid, boolean multiple) {
+        return joinHomogenous(valid.stream().map(s -> formatValidDesc(s)).collect(Collectors.toList()), null, multiple ? "and/or" : "or");
+    }
+
+    public String formatValidDesc(String valid) {
+        List<String> commonStuff = List.of(
+                //list of common one word non-core type ValidTgts that should be lowercase in the target prompt
+                "Player", "Opponent", "Card", "Spell", "Permanent"
+        );
+        if (commonStuff.contains(valid) || CardType.isACardType(valid)) {
+            valid = valid.toLowerCase();
+        }
+        return valid;
     }
 }

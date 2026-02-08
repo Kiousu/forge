@@ -2,12 +2,14 @@ package forge.game;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Lists;
 
 import forge.card.CardStateName;
 import forge.card.MagicColor;
@@ -34,7 +36,7 @@ import forge.util.ITranslatable;
  * Base class for Triggers,ReplacementEffects and StaticAbilities.
  *
  */
-public abstract class CardTraitBase extends GameObject implements IHasCardView, IHasSVars {
+public abstract class CardTraitBase implements GameObject, IHasCardView, IHasSVars {
 
     /** The host card. */
     protected Card hostCard;
@@ -60,13 +62,15 @@ public abstract class CardTraitBase extends GameObject implements IHasCardView, 
 
     /** Keys of descriptive (text) parameters. */
     private static final ImmutableList<String> descriptiveKeys = ImmutableList.<String>builder()
-            .add("Description", "SpellDescription", "StackDescription", "TriggerDescription").build();
+            .add("Description", "SpellDescription", "StackDescription", "TriggerDescription")
+            .add("ChangeTypeDesc", "ValidTgtsDesc")
+            .build();
 
     /**
      * Keys that should not changed
      */
     private static final ImmutableList<String> noChangeKeys = ImmutableList.<String>builder()
-            .add("TokenScript", "TokenImage", "NewName" , "DefinedName", "ChooseFromList")
+            .add("TokenScript", "NewName" , "DefinedName", "ChooseFromList")
             .add("AddAbility").build();
 
     /**
@@ -186,6 +190,7 @@ public abstract class CardTraitBase extends GameObject implements IHasCardView, 
         }
         return level == Integer.parseInt(classLevel);
     }
+    public boolean isManaAbility() { return false; }
 
     /**
      * <p>
@@ -376,20 +381,6 @@ public abstract class CardTraitBase extends GameObject implements IHasCardView, 
             }
         }
 
-        if (params.containsKey("Presence")) {
-            if (hostCard.getCastFrom() == null || hostCard.getCastSA() == null)
-                return false;
-
-            final String type = params.get("Presence");
-
-            int revealed = AbilityUtils.calculateAmount(hostCard, "Revealed$Valid " + type, hostCard.getCastSA());
-            int ctrl = AbilityUtils.calculateAmount(hostCard, "Count$LastStateBattlefield " + type + ".YouCtrl", hostCard.getCastSA());
-
-            if (revealed + ctrl == 0) {
-                return false;
-            }
-        }
-
         if (params.containsKey("LifeTotal")) {
             final String player = params.get("LifeTotal");
             final String lifeCompare = getParamOrDefault("LifeAmount", "GE1");
@@ -548,11 +539,6 @@ public abstract class CardTraitBase extends GameObject implements IHasCardView, 
             }
         }
 
-        if (params.containsKey("ActivateNoLoyaltyAbilitiesCondition")) {
-            final Player active = game.getPhaseHandler().getPlayerTurn();
-            return !active.getActivateLoyaltyAbilityThisTurn(this);
-        }
-
         if (params.containsKey("ClassLevel")) {
             final int level = getHostCard().getClassLevel();
             final int levelMin = Integer.parseInt(params.get("ClassLevel"));
@@ -569,13 +555,23 @@ public abstract class CardTraitBase extends GameObject implements IHasCardView, 
         return CardView.get(hostCard);
     }
 
-    protected IHasSVars getSVarFallback() {
+    protected List<IHasSVars> getSVarFallback(final String name) {
+        List<IHasSVars> result = Lists.newArrayList();
+
         if (this.getKeyword() != null && this.getKeyword().getStatic() != null) {
-            return this.getKeyword().getStatic();
+            // only do when the keyword has part of the SVar in ins original string
+            if (name == null || this.getKeyword().getOriginal().contains(name)) {
+                // TODO try to add the keyword instead if possible?
+                result.add(this.getKeyword().getStatic());
+            }
         }
         if (getCardState() != null)
-            return getCardState();
-        return getHostCard();
+            result.add(getCardState());
+        result.add(getHostCard());
+        return result;
+    }
+    protected Optional<IHasSVars> findSVar(final String name) {
+        return getSVarFallback(name).stream().filter(f -> f.hasSVar(name)).findFirst();
     }
 
     @Override
@@ -583,12 +579,12 @@ public abstract class CardTraitBase extends GameObject implements IHasCardView, 
         if (sVars.containsKey(name)) {
             return sVars.get(name);
         }
-        return getSVarFallback().getSVar(name);
+        return findSVar(name).map(o -> o.getSVar(name)).orElse("");
     }
 
     @Override
     public boolean hasSVar(final String name) {
-        return sVars.containsKey(name) || getSVarFallback().hasSVar(name);
+        return sVars.containsKey(name) || findSVar(name).isPresent();
     }
 
     public Integer getSVarInt(final String name) {
@@ -603,20 +599,19 @@ public abstract class CardTraitBase extends GameObject implements IHasCardView, 
     }
 
     @Override
-    public final void setSVar(final String name, final String value) {
+    public void setSVar(final String name, final String value) {
         sVars.put(name, value);
     }
 
     @Override
     public Map<String, String> getSVars() {
-        Map<String, String> res = Maps.newHashMap(getSVarFallback().getSVars());
+        Map<String, String> res = Maps.newHashMap();
+        // TODO reverse the order
+        for (IHasSVars s : getSVarFallback(null)) {
+            res.putAll(s.getSVars());
+        }
         res.putAll(sVars);
         return res;
-    }
-
-    @Override
-    public Map<String, String> getDirectSVars() {
-        return sVars;
     }
 
     @Override

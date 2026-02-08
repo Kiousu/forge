@@ -1,12 +1,6 @@
 package forge.ai.ability;
 
-import java.util.Map;
-
-import com.google.common.base.Predicates;
-
-import forge.ai.ComputerUtil;
-import forge.ai.ComputerUtilCard;
-import forge.ai.SpellAbilityAi;
+import forge.ai.*;
 import forge.game.card.Card;
 import forge.game.card.CardCollectionView;
 import forge.game.card.CardLists;
@@ -16,23 +10,27 @@ import forge.game.player.Player;
 import forge.game.player.PlayerActionConfirmMode;
 import forge.game.spellability.SpellAbility;
 
+import java.util.Map;
+import java.util.function.Predicate;
+
 public class MutateAi extends SpellAbilityAi {
     @Override
-    protected boolean canPlayAI(Player aiPlayer, SpellAbility sa) {
+    protected AiAbilityDecision canPlay(Player aiPlayer, SpellAbility sa) {
         CardCollectionView mutateTgts = CardLists.getTargetableCards(aiPlayer.getCreaturesInPlay(), sa);
         mutateTgts = ComputerUtil.getSafeTargets(aiPlayer, sa, mutateTgts);
 
         // Filter out some abilities that are useless
         // TODO: add other stuff useless for Mutate here
-        mutateTgts = CardLists.filter(mutateTgts, Predicates.not(Predicates.or(
-                CardPredicates.hasKeyword(Keyword.DEFENDER),
-                CardPredicates.hasKeyword("CARDNAME can't attack."),
-                CardPredicates.hasKeyword("CARDNAME can't block."),
-                card -> ComputerUtilCard.isUselessCreature(aiPlayer, card)
-        )));
+        mutateTgts = CardLists.filter(mutateTgts, Predicate.not(
+                CardPredicates.hasKeyword(Keyword.DEFENDER)
+                        .or(CardPredicates.hasKeyword("CARDNAME can't attack."))
+                        .or(CardPredicates.hasKeyword("CARDNAME can't block."))
+                        .or(card -> ComputerUtilCard.isUselessCreature(aiPlayer, card))
+                )
+        );
 
         if (mutateTgts.isEmpty()) {
-            return false;
+            return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
         }
 
         // Choose the best target
@@ -41,7 +39,7 @@ public class MutateAi extends SpellAbilityAi {
         Card mutateTgt = ComputerUtilCard.getBestCreatureAI(mutateTgts);
         sa.getTargets().add(mutateTgt);
 
-        return true;
+        return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
     }
 
     @Override

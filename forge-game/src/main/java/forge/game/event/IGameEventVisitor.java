@@ -1,9 +1,5 @@
 package forge.game.event;
 
-/** 
- * TODO: Write javadoc for this type.
- *
- */
 public interface IGameEventVisitor<T> {
     T visit(GameEventAnteCardsSelected event);
     T visit(GameEventAttackersDeclared event);
@@ -42,12 +38,13 @@ public interface IGameEventVisitor<T> {
     T visit(GameEventPlayerStatsChanged event);
     T visit(GameEventRandomLog event);
     T visit(GameEventRollDie event);
-    T visit(GameEventTokenStateUpdate event);
     T visit(GameEventScry event);
     T visit(GameEventShuffle event);
+    T visit(GameEventSpeedChanged event);
     T visit(GameEventSpellAbilityCast event);
     T visit(GameEventSpellResolved event);
     T visit(GameEventSpellRemovedFromStack event);
+    T visit(GameEventSprocketUpdate event);
     T visit(GameEventSubgameStart event);
     T visit(GameEventSubgameEnd event);
     T visit(GameEventSurveil event);
@@ -59,6 +56,8 @@ public interface IGameEventVisitor<T> {
     T visit(GameEventCardForetold event);
     T visit(GameEventCardPlotted event);
     T visit(GameEventDayTimeChanged event);
+    T visit(GameEventDoorChanged event);
+    T visit(GameEventSnapshotRestored gameEventSnapshotRestored);
 
     // This is base class for all visitors.
     class Base<T> implements IGameEventVisitor<T>{
@@ -98,12 +97,13 @@ public interface IGameEventVisitor<T> {
         public T visit(GameEventPlayerStatsChanged event) { return null; }
         public T visit(GameEventRandomLog event) { return null; }
         public T visit(GameEventRollDie event) { return null; }
-        public T visit(GameEventTokenStateUpdate event) { return null; }
         public T visit(GameEventScry event) { return null; }
         public T visit(GameEventShuffle event) { return null; }
+        public T visit(GameEventSpeedChanged event) { return null; }
         public T visit(GameEventSpellResolved event) { return null; }
         public T visit(GameEventSpellAbilityCast event) { return null; }
         public T visit(GameEventSpellRemovedFromStack event) { return null; }
+        public T visit(GameEventSprocketUpdate event) { return null; }
         public T visit(GameEventSubgameStart event) { return null; }
         public T visit(GameEventSubgameEnd event) { return null; }
         public T visit(GameEventSurveil event) { return null; }
@@ -116,5 +116,7 @@ public interface IGameEventVisitor<T> {
         public T visit(GameEventCardForetold event) { return null; }
         public T visit(GameEventCardPlotted event) { return null; }
         public T visit(GameEventDayTimeChanged event) { return null; }
+        public T visit(GameEventDoorChanged event) { return null; }
+        public T visit(GameEventSnapshotRestored gameEventSnapshotRestored) { return null; }
     }
 }
