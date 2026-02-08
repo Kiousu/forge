@@ -131,12 +131,16 @@ public final class CEditorCommander extends CDeckEditor<Deck> {
         switch (gameType0) {
             case TinyLeaders:
                 fScreen = FScreen.DECK_EDITOR_TINY_LEADERS;
+                break;
             case Brawl:
                 fScreen = FScreen.DECK_EDITOR_BRAWL;
+                break;
             case Oathbreaker:
                 fScreen = FScreen.DECK_EDITOR_OATHBREAKER;
+                break;
             case DuelCommander:
                 fScreen = FScreen.DECK_EDITOR_DUEL_COMMANDER;
+                break;
             default:
                 fScreen = FScreen.DECK_EDITOR_COMMANDER;
         }
