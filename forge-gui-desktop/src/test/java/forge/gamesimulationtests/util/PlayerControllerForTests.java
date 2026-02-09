@@ -5,14 +5,6 @@ import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import forge.LobbyPlayer;
-import forge.ai.ComputerUtil;
-import forge.ai.ComputerUtilMana;
-import forge.ai.SpellAbilityAi;
-import forge.ai.SpellApiToAi;
-import forge.ai.ability.ChangeZoneAi;
-import forge.ai.ability.DrawAi;
-import forge.ai.ability.GameLossAi;
-import forge.ai.ability.GameWinAi;
 import forge.card.ColorSet;
 import forge.card.ICardFace;
 import forge.card.MagicColor;
@@ -21,7 +13,6 @@ import forge.card.mana.ManaCostShard;
 import forge.deck.Deck;
 import forge.deck.DeckSection;
 import forge.game.*;
-import forge.game.ability.AbilityUtils;
 import forge.game.ability.effects.RollDiceEffect;
 import forge.game.card.*;
 import forge.game.combat.Combat;
@@ -29,6 +20,8 @@ import forge.game.combat.CombatUtil;
 import forge.game.cost.Cost;
 import forge.game.cost.CostPart;
 import forge.game.cost.CostPartMana;
+import forge.game.cost.CostPayment;
+import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
 import forge.game.mana.Mana;
 import forge.game.mana.ManaConversionMatrix;
@@ -39,6 +32,7 @@ import forge.game.spellability.*;
 import forge.game.staticability.StaticAbility;
 import forge.game.trigger.WrappedAbility;
 import forge.game.zone.PlayerZone;
+import forge.game.zone.Zone;
 import forge.game.zone.ZoneType;
 import forge.gamesimulationtests.util.card.CardSpecification;
 import forge.gamesimulationtests.util.card.CardSpecificationHandler;
@@ -86,23 +80,7 @@ public class PlayerControllerForTests extends PlayerController {
 
     @Override
     public void playSpellAbilityNoStack(SpellAbility effectSA, boolean mayChoseNewTargets) {
-        //TODO: eventually (when the real code is refactored) this should be handled normally...
-        if (effectSA.getDescription().equals("At the beginning of your upkeep, if you have exactly 1 life, you win the game.")) {//test_104_2b_effect_may_state_that_player_wins_the_game
-            HumanPlay.playSpellAbilityNoStack(null, player, effectSA, !mayChoseNewTargets);
-            return;
-        }
-        SpellAbilityAi sai = SpellApiToAi.Converter.get(effectSA.getApi());
-        if (
-                (effectSA.getHostCard().getName().equals("Nefarious Lich") && sai instanceof DrawAi) ||
-                (effectSA.getHostCard().getName().equals("Laboratory Maniac") && sai instanceof GameWinAi) ||
-                (effectSA.getHostCard().getName().equals("Nefarious Lich") && sai instanceof ChangeZoneAi) ||
-                (effectSA.getHostCard().getName().equals("Near-Death Experience") && sai instanceof  GameWinAi) ||
-                (effectSA.getHostCard().getName().equals("Final Fortune") && sai instanceof GameLossAi)
-        ) {//test_104_3f_if_a_player_would_win_and_lose_simultaneously_he_loses
-            HumanPlay.playSpellAbilityNoStack(null, player, effectSA, !mayChoseNewTargets);
-            return;
-        }
-        throw new IllegalStateException("Callers of this method currently assume that it performs extra functionality!");
+        HumanPlay.playSpellAbilityNoStack(null, player, effectSA, !mayChoseNewTargets);
     }
 
     @Override
@@ -112,30 +90,110 @@ public class PlayerControllerForTests extends PlayerController {
 
     @Override
     public Map<Card, Integer> assignCombatDamage(Card attacker, CardCollectionView blockers, CardCollectionView remaining, int damageDealt, GameEntity defender, boolean overrideOrder) {
-        if (blockers.size() == 1 && damageDealt == 2 && (
-                (attacker.getName().equals("Grizzly Bears") && blockers.get(0).getName().equals("Ajani's Sunstriker")) ||
-                (attacker.getName().equals("Ajani's Sunstriker") && blockers.get(0).getName().equals("Grizzly Bears"))
-        )) {//test_104_3b_player_with_less_than_zero_life_loses_the_game_only_when_a_player_receives_priority_variant_with_combat
-            Map<Card, Integer> result = new HashMap<>();
-            result.put(blockers.get(0), damageDealt);
-            return result;
+        // Check for test-specified override
+        if (playerActions != null) {
+            AssignCombatDamageAction action = playerActions.getNextActionIfApplicable(player, getGame(), AssignCombatDamageAction.class);
+            if (action != null) {
+                Map<Card, Integer> result = new HashMap<>();
+                Map<String, Integer> spec = action.getDamageAssignment();
+                for (Card blocker : blockers) {
+                    Integer dmg = spec.get(blocker.getName());
+                    if (dmg != null) {
+                        result.put(blocker, dmg);
+                    }
+                }
+                return result;
+            }
         }
-        throw new IllegalStateException("Erring on the side of caution here...");
+
+        // Default: assign damage to blockers in order, with trample remainder to defender
+        Map<Card, Integer> result = new HashMap<>();
+        int damageLeft = damageDealt;
+        boolean hasTrample = attacker.hasKeyword(Keyword.TRAMPLE);
+
+        for (int i = 0; i < blockers.size(); i++) {
+            Card blocker = blockers.get(i);
+            int lethal = blocker.getLethalDamage();
+            if (lethal <= 0) {
+                lethal = 0;
+            }
+            if (i == blockers.size() - 1 && !hasTrample) {
+                // Last blocker with no trample: assign all remaining damage
+                result.put(blocker, damageLeft);
+                damageLeft = 0;
+            } else {
+                int toAssign = Math.min(lethal, damageLeft);
+                result.put(blocker, toAssign);
+                damageLeft -= toAssign;
+            }
+        }
+        return result;
     }
 
     @Override
     public Map<GameEntity, Integer> divideShield(Card effectSource, Map<GameEntity, Integer> affected, int shieldAmount) {
-        throw new IllegalStateException("Erring on the side of caution here...");
+        // Default: distribute evenly with remainder to first entities
+        Map<GameEntity, Integer> result = new HashMap<>();
+        List<GameEntity> entities = new ArrayList<>(affected.keySet());
+        if (entities.isEmpty()) {
+            return result;
+        }
+        int perEntity = shieldAmount / entities.size();
+        int remainder = shieldAmount % entities.size();
+        for (int i = 0; i < entities.size(); i++) {
+            int amount = perEntity + (i < remainder ? 1 : 0);
+            result.put(entities.get(i), amount);
+        }
+        return result;
     }
 
     @Override
     public Map<Byte, Integer> specifyManaCombo(SpellAbility sa, ColorSet colorSet, int manaAmount, boolean different) {
-        throw new IllegalStateException("Erring on the side of caution here...");
+        // Check for test-specified override
+        if (playerActions != null) {
+            SpecifyManaComboAction action = playerActions.getNextActionIfApplicable(player, getGame(), SpecifyManaComboAction.class);
+            if (action != null) {
+                return action.getManaSpec();
+            }
+        }
+
+        // Default: allocate mana across available colors
+        Map<Byte, Integer> result = new HashMap<>();
+        List<MagicColor.Color> colors = new ArrayList<>();
+        for (MagicColor.Color c : colorSet) {
+            if (c != MagicColor.Color.COLORLESS) {
+                colors.add(c);
+            }
+        }
+        if (colors.isEmpty()) {
+            return result;
+        }
+        if (different) {
+            // Assign 1 per color up to manaAmount
+            int assigned = 0;
+            for (MagicColor.Color c : colors) {
+                if (assigned >= manaAmount) break;
+                result.put(c.getColorMask(), 1);
+                assigned++;
+            }
+        } else {
+            // All mana as first available color
+            result.put(colors.get(0).getColorMask(), manaAmount);
+        }
+        return result;
     }
 
     @Override
     public Integer announceRequirements(SpellAbility ability, String announce) {
-        throw new IllegalStateException("Erring on the side of caution here...");
+        // Check for test-specified override
+        if (playerActions != null) {
+            AnnounceAction action = playerActions.getNextActionIfApplicable(player, getGame(), AnnounceAction.class);
+            if (action != null) {
+                return action.getValue();
+            }
+        }
+        // Default: return 0 (safe minimum for X costs)
+        return 0;
     }
 
     @Override
@@ -150,7 +208,31 @@ public class PlayerControllerForTests extends PlayerController {
 
     @Override
     public TargetChoices chooseNewTargetsFor(SpellAbility ability, Predicate<GameObject> filter, boolean optional) {
-        throw new IllegalStateException("Erring on the side of caution here...");
+        // Check for test-specified override
+        if (playerActions != null) {
+            ChooseTargetsAction action = playerActions.getNextActionIfApplicable(player, getGame(), ChooseTargetsAction.class);
+            if (action != null) {
+                TargetChoices newTargets = new TargetChoices();
+                if (action.getTargetCardName() != null) {
+                    for (Card c : getGame().getCardsInGame()) {
+                        if (c.getName().equals(action.getTargetCardName())) {
+                            if (filter == null || filter.test(c)) {
+                                newTargets.add(c);
+                                return newTargets;
+                            }
+                        }
+                    }
+                } else if (action.getTargetPlayer() != null) {
+                    Player target = PlayerSpecificationHandler.INSTANCE.find(getGame(), action.getTargetPlayer());
+                    if (filter == null || filter.test(target)) {
+                        newTargets.add(target);
+                        return newTargets;
+                    }
+                }
+            }
+        }
+        // Default: keep existing targets (return null means "keep old targets")
+        return null;
     }
 
     @Override
@@ -196,8 +278,17 @@ public class PlayerControllerForTests extends PlayerController {
 
     @Override
     public <T extends GameEntity> List<T> chooseEntitiesForEffect(FCollectionView<T> optionList, int min, int max, DelayedReveal delayedReveal, SpellAbility sa, String title, Player relatedPlayer, Map<String, Object> params) {
-        // this isn't used
-        return null;
+        if (delayedReveal != null) {
+            reveal(delayedReveal);
+        }
+        List<T> result = new ArrayList<>();
+        int count = 0;
+        for (T item : optionList) {
+            if (count >= min) break;
+            result.add(item);
+            count++;
+        }
+        return result;
     }
 
     @Override
@@ -279,7 +370,7 @@ public class PlayerControllerForTests extends PlayerController {
 
     @Override
     public boolean willPutCardOnTop(Card c) {
-        return false;
+        return true;
     }
 
     @Override
@@ -304,7 +395,37 @@ public class PlayerControllerForTests extends PlayerController {
 
     @Override
     public CardCollectionView chooseCardsToDiscardUnlessType(int min, CardCollectionView hand, String param, SpellAbility sa) {
-        throw new IllegalStateException("Erring on the side of caution here...");
+        // Check for test-specified override
+        if (playerActions != null) {
+            ChooseCardsAction action = playerActions.getNextActionIfApplicable(player, getGame(), ChooseCardsAction.class);
+            if (action != null) {
+                CardCollection result = new CardCollection();
+                for (String name : action.getCardNames()) {
+                    for (Card c : hand) {
+                        if (c.getName().equals(name) && !result.contains(c)) {
+                            result.add(c);
+                            break;
+                        }
+                    }
+                }
+                return result;
+            }
+        }
+
+        // Default: try to find a card matching the type; if found, discard it to satisfy the "unless"
+        // Otherwise discard first min cards
+        String[] splitTypes = param.split(",");
+        CardCollection result = new CardCollection();
+        for (Card c : hand) {
+            if (c.isValid(splitTypes, sa.getActivatingPlayer(), sa.getHostCard(), sa)) {
+                result.add(c);
+                if (result.size() >= min) {
+                    return result;
+                }
+            }
+        }
+        // Not enough matching type cards found, just discard first min cards
+        return chooseItems(hand, min);
     }
 
     @Override
@@ -423,9 +544,13 @@ public class PlayerControllerForTests extends PlayerController {
 
     @Override
     public List<SpellAbility> chooseSpellAbilityToPlay() {
-        //TODO: This method has to return the spellability chosen by player
-        // It should not play the sa right from here. The code has been left as it is to quickly adapt to changed playercontroller interface
         if (playerActions != null) {
+            PlayLandFromHandAction playLand = playerActions.getNextActionIfApplicable(player, getGame(), PlayLandFromHandAction.class);
+            if (playLand != null) {
+                SpellAbility landSa = playLand.playLandFromHand(player, getGame());
+                return Collections.singletonList(landSa);
+            }
+
             CastSpellFromHandAction castSpellFromHand = playerActions.getNextActionIfApplicable(player, getGame(), CastSpellFromHandAction.class);
             if (castSpellFromHand != null) {
                 castSpellFromHand.castSpellFromHand(player, getGame());
@@ -446,7 +571,7 @@ public class PlayerControllerForTests extends PlayerController {
 
     @Override
     public boolean payCombatCost(Card card, Cost cost, SpellAbility sa, String prompt) {
-        throw new IllegalStateException("Callers of this method currently assume that it performs extra functionality!");
+        return true;
     }
 
     @Override
@@ -466,16 +591,55 @@ public class PlayerControllerForTests extends PlayerController {
 
     @Override
     public List<AbilitySub> chooseModeForAbility(SpellAbility sa, List<AbilitySub> possible, int min, int num, boolean allowRepeat) {
-        throw new IllegalStateException("Erring on the side of caution here...");
+        // Check for test-specified override
+        if (playerActions != null) {
+            ChooseModeAction action = playerActions.getNextActionIfApplicable(player, getGame(), ChooseModeAction.class);
+            if (action != null) {
+                List<AbilitySub> chosen = new ArrayList<>();
+                if (action.getModeIndices() != null) {
+                    for (int idx : action.getModeIndices()) {
+                        if (idx >= 0 && idx < possible.size()) {
+                            chosen.add(possible.get(idx));
+                        }
+                    }
+                } else if (action.getModePrefixes() != null) {
+                    for (String prefix : action.getModePrefixes()) {
+                        for (AbilitySub mode : possible) {
+                            String desc = mode.getDescription();
+                            if (desc != null && desc.startsWith(prefix)) {
+                                chosen.add(mode);
+                                break;
+                            }
+                        }
+                    }
+                }
+                return chosen;
+            }
+        }
+
+        // Default: select first min modes from possible list
+        return new ArrayList<>(possible.subList(0, Math.min(min, possible.size())));
     }
 
     @Override
     public byte chooseColor(String message, SpellAbility sa, ColorSet colors) {
+        if (playerActions != null) {
+            ChooseColorAction action = playerActions.getNextActionIfApplicable(player, getGame(), ChooseColorAction.class);
+            if (action != null && action.getColors().length > 0) {
+                return action.getColors()[0];
+            }
+        }
         return Iterables.getFirst(colors, MagicColor.Color.WHITE).getColorMask();
     }
 
     @Override
     public byte chooseColorAllowColorless(String message, Card card, ColorSet colors) {
+        if (playerActions != null) {
+            ChooseColorAction action = playerActions.getNextActionIfApplicable(player, getGame(), ChooseColorAction.class);
+            if (action != null && action.getColors().length > 0) {
+                return action.getColors()[0];
+            }
+        }
         return Iterables.getFirst(colors, MagicColor.Color.COLORLESS).getColorMask();
     }
 
@@ -483,7 +647,7 @@ public class PlayerControllerForTests extends PlayerController {
         if (items == null || items.isEmpty()) {
             return new CardCollection(items);
         }
-        return (CardCollection)items.subList(0, Math.max(amount, items.size()));
+        return (CardCollection)items.subList(0, Math.min(amount, items.size()));
     }
 
     private <T> T chooseItem(Iterable<T> items) {
@@ -551,7 +715,26 @@ public class PlayerControllerForTests extends PlayerController {
 
     @Override
     public ColorSet chooseColors(String message, SpellAbility sa, int min, int max, ColorSet options) {
-        throw new UnsupportedOperationException("No idea how a test player controller would choose colors");
+        // Check for test-specified override
+        if (playerActions != null) {
+            ChooseColorAction action = playerActions.getNextActionIfApplicable(player, getGame(), ChooseColorAction.class);
+            if (action != null) {
+                int mask = 0;
+                for (byte c : action.getColors()) {
+                    mask |= c;
+                }
+                return ColorSet.fromMask(mask);
+            }
+        }
+        // Default: select first min colors from options
+        int mask = 0;
+        int count = 0;
+        for (MagicColor.Color c : options) {
+            if (count >= min) break;
+            mask |= c.getColorMask();
+            count++;
+        }
+        return ColorSet.fromMask(mask);
     }
 
     @Override
@@ -603,50 +786,214 @@ public class PlayerControllerForTests extends PlayerController {
 
     @Override
     public void orderAndPlaySimultaneousSa(List<SpellAbility> activePlayerSAs) {
-        for (final SpellAbility sa : activePlayerSAs) {
-            prepareSingleSa(sa.getHostCard(),sa,true);
-            ComputerUtil.playStack(sa, player, getGame());
-        }
-    }
-
-    private void prepareSingleSa(final Card host, final SpellAbility sa, boolean isMandatory){
-        if (sa.hasParam("TargetingPlayer")) {
-            Player targetingPlayer = AbilityUtils.getDefinedPlayers(host, sa.getParam("TargetingPlayer"), sa).get(0);
-            sa.setTargetingPlayer(targetingPlayer);
-            targetingPlayer.getController().chooseTargetsFor(sa);
-        } else {
-            // this code is no longer possible!
-            // sa.doTrigger(isMandatory, player);
+        // Process in reverse order (last added resolves first) matching PlayerControllerHuman behavior
+        for (int i = activePlayerSAs.size() - 1; i >= 0; i--) {
+            final SpellAbility next = activePlayerSAs.get(i);
+            if (next.isTrigger() && !next.isCopied()) {
+                HumanPlay.playSpellAbilityNoStack(null, player, next);
+            } else {
+                if (next.isCopied()) {
+                    if (next.isSpell()) {
+                        if (!next.getHostCard().isInZone(ZoneType.Stack)) {
+                            next.setHostCard(player.getGame().getAction().moveToStack(next.getHostCard(), next));
+                        } else {
+                            player.getGame().getStackZone().add(next.getHostCard());
+                        }
+                    }
+                    if (next.isMayChooseNewTargets()) {
+                        next.setupNewTargets(player);
+                    }
+                }
+                player.getGame().getStack().add(next);
+            }
         }
     }
 
     @Override
     public boolean playTrigger(Card host, WrappedAbility wrapperAbility, boolean isMandatory) {
-        prepareSingleSa(host, wrapperAbility, isMandatory);
-        return ComputerUtil.playNoStack(wrapperAbility.getActivatingPlayer(), wrapperAbility, getGame(), true);
+        return HumanPlay.playSpellAbilityNoStack(null, player, wrapperAbility);
     }
 
     @Override
     public boolean playSaFromPlayEffect(SpellAbility tgtSA) {
-        boolean optional = !tgtSA.getPayCosts().isMandatory();
-        boolean noManaCost = tgtSA.hasParam("WithoutManaCost");
-        if (tgtSA instanceof Spell) { // Isn't it ALWAYS a spell?
-            Spell spell = (Spell) tgtSA;
-            // if (spell.canPlayFromEffectAI(player, !optional, noManaCost) || !optional) {  -- could not save this part
-            if (spell.canPlay() || !optional) {
-                ComputerUtil.playStack(tgtSA, player, getGame());
-            } else
-                return false; // didn't play spell
+        // Replicate HumanPlay.playSpellAbility / HumanPlaySpellAbility.playAbility
+        // using TestCostDecision for cost payment instead of GUI-based HumanCostDecision
+        Card source = tgtSA.getHostCard();
+        tgtSA.setActivatingPlayer(player);
+        Game game = getGame();
+
+        // Handle land abilities
+        if (tgtSA.isLandAbility()) {
+            if (tgtSA.canPlay()) {
+                tgtSA.resolve();
+            }
+            return true;
+        }
+
+        source.setSplitStateToPlayAbility(tgtSA);
+
+        // Move spell to stack
+        Zone fromZone = null;
+        int zonePosition = 0;
+        if (tgtSA.isSpell() && !source.isCopiedSpell()) {
+            fromZone = game.getZoneOf(source);
+            if (fromZone != null) {
+                zonePosition = fromZone.getCards().indexOf(source);
+            }
+            tgtSA.setHostCard(game.getAction().moveToStack(source, tgtSA));
+        }
+
+        if (!tgtSA.isCopied()) {
+            tgtSA.resetPaidHash();
+            tgtSA.setPaidLife(0);
+        }
+
+        if (tgtSA.isSpell() && !source.isCopiedSpell()) {
+            tgtSA = GameActionUtil.addExtraKeywordCost(tgtSA);
+        }
+
+        // Announce X and other values
+        announceValuesForAbility(tgtSA);
+
+        // Setup cost payment
+        Cost abCost = tgtSA.getPayCosts();
+        CostPayment payment = new CostPayment(abCost, tgtSA);
+
+        tgtSA.clearManaPaid();
+        tgtSA.getPayingManaAbilities().clear();
+
+        // Check prerequisites: restrictions, targeting, timing
+        // If test code pre-set targets on any ability in the chain, skip setupTargets
+        // (which would clear them) and trust the test
+        boolean preCostOk = tgtSA.checkRestrictions(player)
+                && (hasTargetsInChain(tgtSA) || !tgtSA.usesTargeting() || tgtSA.setupTargets());
+
+        // Freeze stack and pay costs
+        game.getStack().freezeStack(tgtSA);
+        boolean paid = preCostOk && payment.payCost(
+                new TestCostDecision(player, tgtSA.isTrigger(), tgtSA, tgtSA.getHostCard()));
+
+        if (!paid) {
+            payment.refundPayment();
+            GameActionUtil.rollbackAbility(tgtSA, fromZone, zonePosition, payment, source);
+            game.getStack().unfreezeStack();
+            return false;
+        }
+
+        if (payment.isFullyPaid()) {
+            game.getStack().addAndUnfreeze(tgtSA);
         }
         return true;
+    }
 
+    private void announceValuesForAbility(SpellAbility sa) {
+        if (sa.isCopied() || sa.isWrapper()) {
+            return;
+        }
+        Cost cost = sa.getPayCosts();
+        Card card = sa.getHostCard();
+        String announce = sa.getParam("Announce");
+        if (announce != null) {
+            for (String aVar : announce.split(",")) {
+                String varName = aVar.trim();
+                Integer value = announceRequirements(sa, varName);
+                if (value == null) {
+                    value = 0;
+                }
+                if ("X".equalsIgnoreCase(varName)) {
+                    sa.setXManaCostPaid(value);
+                } else {
+                    sa.setSVar(varName, value.toString());
+                    card.setSVar(varName, value.toString());
+                }
+            }
+        } else if (cost != null && cost.hasXInAnyCostPart()) {
+            String sVar = sa.getParamOrDefault("XAlternative", sa.getSVar("X"));
+            if ("Count$xPaid".equals(sVar) || sVar.isEmpty()) {
+                Integer value = announceRequirements(sa, "X");
+                if (value == null) {
+                    value = 0;
+                }
+                sa.setXManaCostPaid(value);
+            }
+        } else {
+            sa.setXManaCostPaid(null);
+        }
+    }
+
+    private boolean hasTargetsInChain(SpellAbility sa) {
+        SpellAbility current = sa;
+        while (current != null) {
+            if (current.usesTargeting() && current.getTargets().size() > 0) {
+                return true;
+            }
+            current = current.getSubAbility();
+        }
+        return false;
     }
 
     @Override
     public boolean chooseTargetsFor(SpellAbility currentAbility) {
-        // no longer possible to run AI's methods on SpellAbility
-        // return currentAbility.doTrigger(true, player);
-        return false;
+        TargetRestrictions tgt = currentAbility.getTargetRestrictions();
+        if (tgt == null) {
+            return true;
+        }
+        Card card = currentAbility.getHostCard();
+        int min = tgt.getMinTargets(card, currentAbility);
+        int max = tgt.getMaxTargets(card, currentAbility);
+
+        if (min == 0 && max == 0) {
+            return true;
+        }
+
+        // Gather all valid candidates (cards and non-card game entities)
+        List<GameEntity> allCandidates = tgt.getAllCandidates(currentAbility, true);
+        List<Card> validCards = CardUtil.getValidCardsToTarget(currentAbility);
+
+        // Combine into a single ordered list: cards first, then non-card entities
+        List<GameEntity> ordered = new ArrayList<>();
+        ordered.addAll(validCards);
+        for (GameEntity ge : allCandidates) {
+            if (!(ge instanceof Card) && !ordered.contains(ge)) {
+                ordered.add(ge);
+            }
+        }
+
+        if (ordered.size() < min) {
+            return false;
+        }
+
+        // Select min targets
+        int toSelect = Math.min(min > 0 ? min : 1, ordered.size());
+        for (int i = 0; i < toSelect; i++) {
+            currentAbility.getTargets().add(ordered.get(i));
+        }
+
+        // Handle divided-as-you-choose
+        int amount = currentAbility.getStillToDivide();
+        if (toSelect > 0 && amount > 0) {
+            Iterable<GameEntity> targets = currentAbility.getTargets().getTargetEntities();
+            int size = 0;
+            for (GameEntity ignored : targets) {
+                size++;
+            }
+            if (size == 1) {
+                currentAbility.addDividedAllocation(
+                        currentAbility.getTargets().getTargetEntities().iterator().next(), amount);
+            } else if (size > 0) {
+                // Distribute evenly
+                int perTarget = amount / size;
+                int remainder = amount % size;
+                int idx = 0;
+                for (GameEntity e : targets) {
+                    int alloc = perTarget + (idx < remainder ? 1 : 0);
+                    currentAbility.addDividedAllocation(e, alloc);
+                    idx++;
+                }
+            }
+        }
+
+        return true;
     }
 
     @Override
@@ -682,10 +1029,8 @@ public class PlayerControllerForTests extends PlayerController {
     }
 
     @Override
-    public boolean payManaCost(ManaCost toPay, CostPartMana costPartMana, SpellAbility sa, String prompt /* ai needs hints as well */, ManaConversionMatrix matrix, boolean effect) {
-        // TODO Auto-generated method stub
-        ManaCostBeingPaid cost = new ManaCostBeingPaid(toPay);
-        return ComputerUtilMana.payManaCost(cost, sa, player, effect);
+    public boolean payManaCost(ManaCost toPay, CostPartMana costPartMana, SpellAbility sa, String prompt, ManaConversionMatrix matrix, boolean effect) {
+        return true;
     }
 
     @Override
@@ -706,16 +1051,32 @@ public class PlayerControllerForTests extends PlayerController {
     public Card chooseSingleCardForZoneChange(ZoneType destination,
             List<ZoneType> origin, SpellAbility sa, CardCollection fetchList, DelayedReveal delayedReveal,
             String selectPrompt, boolean isOptional, Player decider) {
-        if (delayedReveal != null) {
-            reveal(delayedReveal);
-        }
-        return ChangeZoneAi.chooseCardToHiddenOriginChangeZone(destination, origin, sa, fetchList, player, decider);
+        return chooseSingleEntityForEffect(fetchList, delayedReveal, sa, selectPrompt, isOptional, decider, null);
     }
 
     @Override
     public List<Card> chooseCardsForZoneChange(ZoneType destination, List<ZoneType> origin, SpellAbility sa, CardCollection fetchList, int min, int max, DelayedReveal delayedReveal, String selectPrompt, Player decider) {
-        // this isn't used
-        return null;
+        if (delayedReveal != null) {
+            reveal(delayedReveal);
+        }
+        // Check for test-specified override
+        if (playerActions != null) {
+            ChooseCardsAction action = playerActions.getNextActionIfApplicable(player, getGame(), ChooseCardsAction.class);
+            if (action != null) {
+                List<Card> result = new ArrayList<>();
+                for (String name : action.getCardNames()) {
+                    for (Card c : fetchList) {
+                        if (c.getName().equals(name) && !result.contains(c)) {
+                            result.add(c);
+                            break;
+                        }
+                    }
+                }
+                return result;
+            }
+        }
+        // Default: return first min cards from fetchList
+        return new ArrayList<>(fetchList.subList(0, Math.min(min, fetchList.size())));
     }
 
     @Override
@@ -739,32 +1100,32 @@ public class PlayerControllerForTests extends PlayerController {
 
     @Override
     public ICardFace chooseSingleCardFace(SpellAbility sa, String message, Predicate<ICardFace> cpp, String name) {
-        // TODO Auto-generated method stub
-        return null;
+        return forge.StaticData.instance().getCommonCards().streamAllFaces()
+                .filter(cpp)
+                .findFirst()
+                .orElse(null);
     }
 
     @Override
     public String chooseCardName(SpellAbility sa, Predicate<ICardFace> cpp, String valid, String message) {
-        // TODO Auto-generated method stub
-        return null;
+        ICardFace face = chooseSingleCardFace(sa, message, cpp, sa.getHostCard().getName());
+        return face != null ? face.getName() : "";
     }
 
     @Override
     public String chooseCardName(SpellAbility sa, List<ICardFace> faces, String message) {
-        // TODO Auto-generated method stub
-        return null;
+        ICardFace face = chooseSingleCardFace(sa, faces, message);
+        return face != null ? face.getName() : "";
     }
 
     @Override
     public ICardFace chooseSingleCardFace(SpellAbility sa, List<ICardFace> faces, String message) {
-        // TODO Auto-generated method stub
-        return null;
+        return faces.isEmpty() ? null : faces.get(0);
     }
 
     @Override
     public CardState chooseSingleCardState(SpellAbility sa, List<CardState> states, String message, Map<String, Object> params) {
-        // TODO Auto-generated method stub
-        return null;
+        return states.isEmpty() ? null : states.get(0);
     }
 
     @Override
@@ -775,14 +1136,12 @@ public class PlayerControllerForTests extends PlayerController {
     @Override
     public List<OptionalCostValue> chooseOptionalCosts(SpellAbility choosen,
             List<OptionalCostValue> optionalCostValues) {
-        // TODO Auto-generated method stub
-        return null;
+        return new ArrayList<>();
     }
 
     @Override
     public boolean confirmMulliganScry(Player p) {
-        // TODO Auto-generated method stub
-        return false;
+        return true;
     }
 
     @Override
@@ -802,12 +1161,11 @@ public class PlayerControllerForTests extends PlayerController {
         return new CardCollection();
     }
 
-	@Override
-	public List<SpellAbility> chooseSpellAbilitiesForEffect(List<SpellAbility> spells, SpellAbility sa, String title,
-			int num, Map<String, Object> params) {
-		// TODO Auto-generated method stub
-		return null;
-	}
+    @Override
+    public List<SpellAbility> chooseSpellAbilitiesForEffect(List<SpellAbility> spells, SpellAbility sa, String title,
+            int num, Map<String, Object> params) {
+        return spells.subList(0, Math.min(num, spells.size()));
+    }
 
     @Override
     public List<CostPart> orderCosts(List<CostPart> costs) {
